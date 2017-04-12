@@ -7,10 +7,50 @@ import baxter_interface
 from std_srvs.srv import Empty
 from std_msgs.msg import Bool
 
-from gazebo_msgs.srv import SetModelConfiguration
+from gazebo_msgs.srv import SetModelConfiguration, SetLinkProperties, GetLinkProperties, SetModelState 
+from gazebo_msgs.msg import ModelState 
 from lab_baxter_common.camera_toolkit.camera_control_helpers import CameraController
 from sensor_msgs.msg import Image
 from scipy.misc import imsave
+from geometry_msgs.msg import Pose, Twist
+
+_max_limit = np.array([1,0.75,3,2.6,3,2,3])
+_min_limit = np.array([-1.6,-2,-3,0,-3,-1.57,-3])
+
+from gym.envs.registration import registry, register, make, spec
+import gym
+import matplotlib.pyplot as plt
+
+register(
+    id='BaxterEnv-v0',
+    entry_point='baxter_env:BaxterEnv',
+    max_episode_steps=10,
+)
+
+
+def generate_random_pose():
+    """
+    Generates a random baxter pose
+    """
+    return np.random.uniform(_min_limit, _max_limit).tolist()
+
+class BaxterActionSpace(gym.Space):
+
+
+    def __init__(self):
+        self._max_vel = np.array([0.2,0.2,0.2,0.2,0.2,0.2,0.2])
+        self._min_vel = np.array([-0.2,-0.2,-0.2,-0.2,-0.2,-0.2,-0.2])
+
+    def sample(self):
+        """
+        Randomly return a sample
+        """
+        return np.random.uniform(self._min_vel, self._max_vel)
+
+    def contains(self, x):
+
+        #check if the stuff is in range
+        return (x < self._max_vel).all() and (x > self._min_vel).all()
 
 
 class BaxterEnv(gym.Env):
@@ -24,6 +64,9 @@ class BaxterEnv(gym.Env):
 
     def __init__(self):
 
+
+        self.action_space = BaxterActionSpace()
+
         rospy.init_node('baxter_env_v0',anonymous=True)
 
         #services used by gazebo 
@@ -33,15 +76,24 @@ class BaxterEnv(gym.Env):
         self._reset_sim = rospy.ServiceProxy('/gazebo/reset_simulation',Empty)
 
         self._set_model = rospy.ServiceProxy('/gazebo/set_model_configuration',SetModelConfiguration)
+        self._set_link = rospy.ServiceProxy('/gazebo/set_model_state',SetModelState)
+        self._get_link = rospy.ServiceProxy('/gazebo/get_link_properties',GetLinkProperties)
         rospy.Subscriber('/cameras/left_hand_camera/image',Image,self._image_callback)
         #publisher
         self._enable_pub = rospy.Publisher('/robot/set_super_enable',Bool,queue_size=1)
 
+        self._ball_prop = self._get_link("ball::ball")
+
         self._reset()
-
-
         
 
+    def _calculate_reward(self, state):
+        """
+        calculate reward, right now is just how much green pixels we see in the image
+        """
+        threshold = 200
+        val = np.sum(state[:,:,1] > threshold)
+        return -1 if(val == 0) else val 
 
     def _step(self, action):
         """
@@ -60,51 +112,64 @@ class BaxterEnv(gym.Env):
         #hopefully this will be enough to get one cycle
         self._time_rate.sleep()
         #the state will be the current join angles
-        state = self._left_arm.joint_angles()
-
+        joint_angles = self._left_arm.joint_angles()
+        image = self._last_image
+        reward = self._calculate_reward(image)
         #pause the simulation
         rospy.wait_for_service('/gazebo/pause_physics')
         self._pause_gazebo()
 
         #return the current state, reward and bool and something
-        return state.values(), 1, False, {"info":"something"}
+        return (joint_angles, image), reward, False, {"info":"something"}
 
     def _reset(self):
 
-        # #pause the simulation
-        # rospy.wait_for_service('/gazebo/pause_physics')
-        # self._pause_gazebo()   
 
-
-        #move the joints to a specific configurations
-        self._last_image = None
-        #restart the environment
-        #self._reset_sim()
-        #self._reset_baxter()
-        #time.sleep(1)
-        #self._enable_pub.publish(True)
-        #time.sleep(3)        
         #unpause gazebo
         rospy.wait_for_service('/gazebo/unpause_physics')
         self._unpause_gazebo()        
 
-        #the arm we are playing with
+        #restart the image
+        self._last_image = None
+
+        #initialize interface here. Done here as this is the only point
+        #where we are 100% sure we are in an unpaused state
         self._left_arm = baxter_interface.limb.Limb('left')
         self._left_joint_names = self._left_arm.joint_names()
         self._time_rate = rospy.Rate(20)
-        #return current state
-        state = self._left_arm.joint_angles()
+        #reset the model to the default position
+        #joint_positions = [-0.5,0,-0.00123203, 1,0.25,-1.5,0.0265941]
+        joint_positions = generate_random_pose()
+        self._set_model("baxter","robot_description",self._left_joint_names,joint_positions)        
+
+        new_pose = Pose()
+        empty_twist = Twist()
+        new_pose.orientation.y = 0
+        new_pose.position.x = 1.25 + np.random.uniform(-0.1,0.1)
+        new_pose.position.y = 0.4 + np.random.uniform(-0.1,0.1)
+        new_pose.position.z = 1.1 + np.random.uniform(-0.1,0.1)
+        #ref = self._ball_prop
+        #self._set_link("ball::ball", new_pose, False, ref.mass,ref.ixx,ref.ixy,ref.ixz,ref.iyy,ref.iyz,ref.izz)
+        ms = ModelState()
+        ms.model_name = "ball"
+        ms.pose = new_pose
+        ms.twist = empty_twist
+        self._set_link(ms)
+
+        #reset the image
+        self._last_image = None
+
+        #wait until we get newest image
+        while(self._last_image is None):
+            rospy.sleep(0.1)
 
         # #pause the simulation
         rospy.wait_for_service('/gazebo/pause_physics')
         self._pause_gazebo()   
 
-        joint_positions = [-0.272659,1.04701,-0.00123203, 0.49262,-0.0806423,-0.0620532,0.0265941]
-        self._set_model("baxter","robot_description",self._left_joint_names,joint_positions)
+        #return the newest image as state
+        return (joint_positions, self._last_image) 
 
-
-
-        return joint_positions
 
 
     def _render(self,mode,close):
