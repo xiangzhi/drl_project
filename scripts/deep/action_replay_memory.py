@@ -1,5 +1,5 @@
 
-from deeprl_hw2.core import ReplayMemory, Sample
+from deep.core import ReplayMemory, Sample
 import numpy as np
 import sys
 
@@ -103,7 +103,7 @@ class ActionReplayMemory(ReplayMemory):
                 terminal_list.append(int(True))
 
         #print(curr_state_list)
-        return np.array(curr_state_list), np.array(next_state_list), np.array(reward_list), np.array(action_list), np.array(terminal_list)
+        return curr_state_list, next_state_list, np.array(reward_list), np.array(action_list), np.array(terminal_list)
 
     def clear(self):
 

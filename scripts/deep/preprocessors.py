@@ -2,8 +2,8 @@
 
 import numpy as np
 
-from deeprl_hw2 import utils
-from deeprl_hw2.core import Preprocessor
+import utils
+from .core import Preprocessor
 from scipy import misc
 
 import collections
@@ -74,17 +74,15 @@ class BaxterPreprocessor(Preprocessor):
         self._new_size = new_size
 
     def process_state_for_memory(self, state):
-        """Scale, convert to greyscale and store as uint8.
-
-        We don't want to save floating point numbers in the replay
-        memory. We get the same resolution as uint8, but use a quarter
-        to an eigth of the bytes (depending on float32 or float64)
-
-        We recommend using the Python Image Library (PIL) to do the
-        image conversions.
         """
-
-        return self._internal_process(state, np.uint8)
+        The incoming state will be a tuple
+        """
+        joint_angles = state[0]
+        image = state[1]
+        #convert the image and downsample
+        image = self._image_processing(image, np.uint8)
+        #Scale, convert to greyscale and store as uint8.
+        return (joint_angles, image)
 
 
     def process_state_for_network(self, state):
@@ -93,18 +91,21 @@ class BaxterPreprocessor(Preprocessor):
         Basically same as process state for memory, but this time
         outputs float32 images.
         """
-        
-        return self._internal_process(state, np.float32)
+        joint_angles = state[0]
+        image = state[1]
+        #convert the image and downsample
+        image = self._image_processing(image, np.float32)
+        #Scale, convert to greyscale and store as uint8.
+        return (joint_angles, image)
 
-
-    def _internal_process(self, state, dtype):
+    def _image_processing(self, state, dtype):
         """
         Scale and convert to gray scale plus change to dtype
         """
         #convert from rgb to greyscale
         #image_np = utils.rgb2gray(state)
         #resize and return
-        return (misc.imresize(image_np,self._new_size)).astype(dtype)
+        return (misc.imresize(state,self._new_size)).astype(dtype)
         
 
     def process_batch(self, samples):
@@ -114,7 +115,10 @@ class BaxterPreprocessor(Preprocessor):
         samples from the replay memory. Meaning you need to convert
         both state and next state values.
         """
-        return np.float32(samples)
+        new_list = []
+        for sample in samples:
+            new_list.append((sample[0], np.float32(sample[1])))
+        return new_list
 
     def process_reward(self, reward):
         return reward
@@ -124,6 +128,7 @@ class BaxterPreprocessor(Preprocessor):
         Return a copied instance of itself
         """
         return BaxterPreprocessor(self._new_size)
+
 
 class NumpyPreprocessor(Preprocessor):
     """
@@ -138,117 +143,24 @@ class NumpyPreprocessor(Preprocessor):
     def process_state_for_memory(self, state):
         return self.converter(state, np.uint8)
 
+
     def converter(self, state, dtype):
 
+        
         size = len(state)
-        new_arr = np.zeros((np.size(state[0],0), np.size(state[0],1),size), dtype=dtype)
+        image = np.zeros((np.size(state[0][1],0), np.size(state[0][1],1),np.size(state[0][1],2)), dtype=dtype)
+        image[:,:,:] = state[0][1] #we only store the most recent image
+        joint_arr = np.zeros((np.size(state[0][0]),size))
         for i in range(0,size):
-            new_arr[:,:,i] = state[i]  
-        return new_arr
+            if(state[i] == 0):
+                continue;
+            i_state = state[i]
+            #image_arr[:,:,:,i] = i_state[1]
+            joint_arr[:,i] = i_state[0]  
+        return (joint_arr, image)
 
     def clone(self):
         return NumpyPreprocessor()
-
-
-class AtariPreprocessor(Preprocessor):
-    """Converts images to greyscale and downscales.
-
-    Based on the preprocessing step described in:
-
-    @article{mnih15_human_level_contr_throug_deep_reinf_learn,
-    author =	 {Volodymyr Mnih and Koray Kavukcuoglu and David
-                  Silver and Andrei A. Rusu and Joel Veness and Marc
-                  G. Bellemare and Alex Graves and Martin Riedmiller
-                  and Andreas K. Fidjeland and Georg Ostrovski and
-                  Stig Petersen and Charles Beattie and Amir Sadik and
-                  Ioannis Antonoglou and Helen King and Dharshan
-                  Kumaran and Daan Wierstra and Shane Legg and Demis
-                  Hassabis},
-    title =	 {Human-Level Control Through Deep Reinforcement
-                  Learning},
-    journal =	 {Nature},
-    volume =	 518,
-    number =	 7540,
-    pages =	 {529-533},
-    year =	 2015,
-    doi =        {10.1038/nature14236},
-    url =	 {http://dx.doi.org/10.1038/nature14236},
-    }
-
-    You may also want to max over frames to remove flickering. Some
-    games require this (based on animations and the limited sprite
-    drawing capabilities of the original Atari).
-
-    Parameters
-    ----------
-    new_size: 2 element tuple
-      The size that each image in the state should be scaled to. e.g
-      (84, 84) will make each image in the output have shape (84, 84).
-    """
-
-    def __init__(self, new_size, min_reward, max_reward):
-        self._new_size = new_size
-        self._min_reward = min_reward
-        self._max_reward = max_reward
-        self._name = "atari_preprocessor"
-
-    def process_state_for_memory(self, state):
-        """Scale, convert to greyscale and store as uint8.
-
-        We don't want to save floating point numbers in the replay
-        memory. We get the same resolution as uint8, but use a quarter
-        to an eigth of the bytes (depending on float32 or float64)
-
-        We recommend using the Python Image Library (PIL) to do the
-        image conversions.
-        """
-
-        return self._internal_process(state, np.uint8)
-
-
-    def process_state_for_network(self, state):
-        """Scale, convert to greyscale and store as float32.
-
-        Basically same as process state for memory, but this time
-        outputs float32 images.
-        """
-        
-        return self._internal_process(state, np.float32)
-
-
-    def _internal_process(self, state, dtype):
-        """
-        Scale and convert to gray scale plus change to dtype
-        """
-        #convert from rgb to greyscale
-        image_np = utils.rgb2gray(state)
-        #resize and return
-        return (misc.imresize(image_np,self._new_size)).astype(dtype)
-        
-
-    def process_batch(self, samples):
-        """The batches from replay memory will be uint8, convert to float32.
-
-        Same as process_state_for_network but works on a batch of
-        samples from the replay memory. Meaning you need to convert
-        both state and next state values.
-        """
-        return np.float32(samples)
-
-    def process_reward(self, reward):
-        """Clip reward between -1 and 1."""
-
-        #normalize reward to range >= 0
-        #norm_reward = reward - self._min_reward
-        #return np.max([-1,np.min([1,1 - ((self._max_reward - float(reward))/self._max_reward)*2])])
-        return 1 if (reward > 0) else 0
-
-    def clone(self):
-        """
-        Return a copied instance of itself
-        """
-        return AtariPreprocessor(self._new_size, self._min_reward, self._max_reward)
-
 
 class PreprocessorSequence(Preprocessor):
     """You may find it useful to stack multiple prepcrocesosrs (such as the History and the AtariPreprocessor).

@@ -73,7 +73,9 @@ def get_soft_target_model_updates(target, source, tau):
     list(tf.Tensor)
       List of tensor update ops.
     """
-    pass
+    new_weights = (1 - tau)*target.get_weights() + tau * source.get_weights()
+    target.set_weights(new_weights)
+    return target
 
 
 def get_hard_target_model_updates(target, source):
@@ -119,6 +121,8 @@ def memory_burn_in(env, memory, preprocessors, burn_in_size):
         if(is_terminal):
             processed_end_state = processed_next_state
             memory.end_episode(processed_end_state,True)
+            curr_state = env.reset()
+            processed_next_state = preprocessors.process_state_for_memory(curr_state)
             
         #move to next state
         processed_curr_state = processed_next_state

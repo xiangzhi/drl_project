@@ -4,8 +4,8 @@ import copy
 import json
 import sys
 
-from deeprl_hw2.utils import get_hard_target_model_updates, clone_keras_model
-from deeprl_hw2.policy import GreedyEpsilonPolicy
+from .utils import get_hard_target_model_updates, clone_keras_model
+from .policy import GreedyEpsilonPolicy
 
 """Main DQN agent."""
 

@@ -17,16 +17,6 @@ from geometry_msgs.msg import Pose, Twist
 _max_limit = np.array([1,0.75,3,2.6,3,2,3])
 _min_limit = np.array([-1.6,-2,-3,0,-3,-1.57,-3])
 
-from gym.envs.registration import registry, register, make, spec
-import gym
-import matplotlib.pyplot as plt
-
-register(
-    id='BaxterEnv-v0',
-    entry_point='baxter_env:BaxterEnv',
-    max_episode_steps=10,
-)
-
 
 def generate_random_pose():
     """
@@ -38,8 +28,8 @@ class BaxterActionSpace(gym.Space):
 
 
     def __init__(self):
-        self._max_vel = np.array([0.2,0.2,0.2,0.2,0.2,0.2,0.2])
-        self._min_vel = np.array([-0.2,-0.2,-0.2,-0.2,-0.2,-0.2,-0.2])
+        self._max_vel = np.array([0.3,0.3,0.3,0.3,0.3,0.3,0.3])
+        self._min_vel = np.array([-0.3,-0.3,-0.3,-0.3,-0.3,-0.3,-0.3])
 
     def sample(self):
         """
@@ -63,7 +53,6 @@ class BaxterEnv(gym.Env):
 
 
     def __init__(self):
-
 
         self.action_space = BaxterActionSpace()
 
@@ -103,8 +92,6 @@ class BaxterEnv(gym.Env):
         #unpause the simulation
         rospy.wait_for_service('/gazebo/unpause_physics')
         self._unpause_gazebo()
-        print("unpaused")
-
 
         #set the velocity
         cmd = dict(zip(self._left_joint_names,action))
@@ -119,8 +106,9 @@ class BaxterEnv(gym.Env):
         rospy.wait_for_service('/gazebo/pause_physics')
         self._pause_gazebo()
 
+
         #return the current state, reward and bool and something
-        return (joint_angles, image), reward, False, {"info":"something"}
+        return (joint_angles.values(), image), reward, False, {"info":"something"}
 
     def _reset(self):
 
@@ -136,7 +124,7 @@ class BaxterEnv(gym.Env):
         #where we are 100% sure we are in an unpaused state
         self._left_arm = baxter_interface.limb.Limb('left')
         self._left_joint_names = self._left_arm.joint_names()
-        self._time_rate = rospy.Rate(20)
+        self._time_rate = rospy.Rate(10)
         #reset the model to the default position
         #joint_positions = [-0.5,0,-0.00123203, 1,0.25,-1.5,0.0265941]
         joint_positions = generate_random_pose()
@@ -166,6 +154,9 @@ class BaxterEnv(gym.Env):
         # #pause the simulation
         rospy.wait_for_service('/gazebo/pause_physics')
         self._pause_gazebo()   
+
+        #step counter
+        self._episode_steps = 0;
 
         #return the newest image as state
         return (joint_positions, self._last_image) 
