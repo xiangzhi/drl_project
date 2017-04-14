@@ -121,6 +121,12 @@ class BaxterPreprocessor(Preprocessor):
         return new_list
 
     def process_reward(self, reward):
+        """
+        We know the max score given the reward function is like 50 * 80 * 80 = 320000. We scale the reward to between [-1 and 1]
+        """
+        if(reward > 0):
+            reward = reward/320000.0
+            reward = 1 if(reward > 1) else reward
         return reward
 
     def clone(self):
