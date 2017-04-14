@@ -4,6 +4,7 @@ import semver
 import tensorflow as tf
 from keras.models import Model, model_from_json
 import sys
+import numpy as np
 
 def clone_keras_model(target, custom_objects=None):  
     """
@@ -73,7 +74,9 @@ def get_soft_target_model_updates(target, source, tau):
     list(tf.Tensor)
       List of tensor update ops.
     """
-    new_weights = (1 - tau)*target.get_weights() + tau * source.get_weights()
+    target_weights = target.get_weights()
+    tau_values = np.ones(np.shape(target_weights)) * tau
+    new_weights = (1 - tau_values) * target.get_weights() + tau_values * source.get_weights()
     target.set_weights(new_weights)
     return target
 

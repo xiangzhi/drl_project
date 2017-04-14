@@ -4,7 +4,7 @@ import copy
 import json
 import sys
 
-from .utils import get_hard_target_model_updates, clone_keras_model
+from .utils import get_hard_target_model_updates, clone_keras_model, get_soft_target_model_updates
 from .policy import GreedyEpsilonPolicy
 
 import tensorflow as tf
