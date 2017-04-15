@@ -9,7 +9,6 @@ from std_msgs.msg import Bool
 
 from gazebo_msgs.srv import SetModelConfiguration, SetLinkProperties, GetLinkProperties, SetModelState 
 from gazebo_msgs.msg import ModelState 
-from lab_baxter_common.camera_toolkit.camera_control_helpers import CameraController
 from sensor_msgs.msg import Image
 from scipy.misc import imsave
 from geometry_msgs.msg import Pose, Twist

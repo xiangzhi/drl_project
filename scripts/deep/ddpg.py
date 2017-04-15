@@ -43,7 +43,7 @@ class DDPGAgent(object):
       self._eval_times = 10 #how many episodes we run to evaluate the network
       self._eval_freq = 2000 #how many steps before we do evaluation
       self._action_dim = 7  
-      self._checkin_freq = 10000
+      self._checkin_freq = 20000
       self._update_tau = 0.001
       
       #we make a copy of the preprocessor just for evaluation
@@ -76,6 +76,11 @@ class DDPGAgent(object):
           self._actor_update_opt = opt.apply_gradients(zip(param_gradient, actor_weights))
 
         self._sess.run(tf.global_variables_initializer())
+
+
+        # #model trainign callbacks
+        # self._log_dir = "{}-graph".format(self._run_name)
+        # self._actor_ = keras.callbacks.TensorBoard(log_dir=self._log_dir, histogram_freq=0, write_graph=True, write_images=True)
 
 
 
@@ -316,7 +321,7 @@ class DDPGAgent(object):
             curr_reward = 0
             #apply the action and save the reward
             next_state, reward, is_terminal, debug_info = env.step(curr_action)
-            curr_reward = reward
+            curr_reward = self._preprocessors.process_reward(reward)
             # #depend on how many frames we skip
             # for i in range(0, self._skip_frame):
             #   last_frame = curr_frame
@@ -328,7 +333,7 @@ class DDPGAgent(object):
             processed_next_state = self._preprocessors.process_state_for_memory(next_state)        
 
             #insert into memory
-            self._replay_memory.insert(processed_curr_state, processed_next_state, curr_action, self._preprocessors.process_reward(curr_reward), is_terminal)
+            self._replay_memory.insert(processed_curr_state, processed_next_state, curr_action, curr_reward, is_terminal)
 
 
             #update the policy

@@ -106,8 +106,8 @@ def main():
     input_shape = (80,80,3)
     batch_size = 32
     action_dim = 7
-    memory_size = 100000
-    memory_burn_in_num = 5000
+    memory_size = 500000
+    memory_burn_in_num = 10000
     start_epsilon = 1
     end_epsilon = 0.01
     decay_steps = 1000000
