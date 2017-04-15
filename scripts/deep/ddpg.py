@@ -428,7 +428,7 @@ class DDPGAgent(object):
             if(is_terminal):
               break
             curr_state = next_state
-            curr_episode_reward += reward
+            curr_episode_reward += self._preprocessors_eval.process_reward(reward)
 
 
           #print("Episode {} ended with length:{} and reward:{}".format(episode_num, curr_episode_step, curr_episode_reward))

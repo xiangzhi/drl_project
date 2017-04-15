@@ -96,7 +96,7 @@ def main():
     #env = gym.make("Breakout-v0")
 
     env = gym.make("BaxterEnv-v0")
-    run_name = 'basic_1'
+    run_name = 'basic_2' if (sys.argv[1] == None) else sys.argv[1]
 
     #initialize tensorflow
     sess = tf.Session()

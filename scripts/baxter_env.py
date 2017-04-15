@@ -72,6 +72,7 @@ class BaxterEnv(gym.Env):
 
         self._ball_prop = self._get_link("ball::ball")
 
+        self._total_reset()
         self._reset()
         
 
@@ -109,9 +110,8 @@ class BaxterEnv(gym.Env):
         #return the current state, reward and bool and something
         return (joint_angles.values(), image), reward, False, {"info":"something"}
 
-    def _reset(self):
 
-
+    def _total_reset(self):
         #unpause gazebo
         rospy.wait_for_service('/gazebo/unpause_physics')
         self._unpause_gazebo()        
@@ -124,8 +124,27 @@ class BaxterEnv(gym.Env):
         self._left_arm = baxter_interface.limb.Limb('left')
         self._left_joint_names = self._left_arm.joint_names()
         self._time_rate = rospy.Rate(10)
-        #reset the model to the default position
-        #joint_positions = [-0.5,0,-0.00123203, 1,0.25,-1.5,0.0265941]
+
+        #make sure it's started
+        rospy.sleep(1)
+
+        # #pause the simulation
+        rospy.wait_for_service('/gazebo/pause_physics')
+        self._pause_gazebo() 
+
+
+
+    def _reset(self):
+
+
+        #unpause gazebo
+        rospy.wait_for_service('/gazebo/unpause_physics')
+        self._unpause_gazebo()        
+
+        #restart the image
+        self._last_image = None
+
+        #reset the model to the a random position
         joint_positions = generate_random_pose()
         self._set_model("baxter","robot_description",self._left_joint_names,joint_positions)        
 
@@ -159,7 +178,6 @@ class BaxterEnv(gym.Env):
 
         #return the newest image as state
         return (joint_positions, self._last_image) 
-
 
 
     def _render(self,mode,close):

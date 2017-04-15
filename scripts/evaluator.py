@@ -1,6 +1,7 @@
+#!/usr/bin/env python
+
 import gym
 import time
-from deeprl_hw2.dqn import DQNAgent
 
 from keras.layers import (Activation, Convolution2D, Dense, Flatten, Input,
                           Permute)
@@ -29,14 +30,21 @@ register(
 )
 
 def main():
+
+    #initialize tensorflow
+    sess = tf.Session()
+    K.set_session(sess)
+
+
     if(len(sys.argv) != 3):
         print("usage:{} <model_json> <weights> ".format(sys.argv[0]))
         return sys.exit()
     env = gym.make("BaxterEnv-v0")
-    with open(sys.argv[2]) as json_file:
+    with open(sys.argv[1]) as json_file:
         model = model_from_json(json.load(json_file))
 
-    model.load_weights(sys.argv[3])
+    model.load_weights(sys.argv[2])
+    print("weight loaded")
     epsilon = 0.01
     input_shape = (80,80)
     history_size = 4
@@ -47,12 +55,9 @@ def main():
     numpy_prep = NumpyPreprocessor()
     preprocessors = PreprocessorSequence([baxter_prep, history_prep,numpy_prep]) #from left to right
 
-    #initialize tensorflow
-    sess = tf.Session()
-    K.set_session(sess)
 
     agent = DDPGAgent(sess,model, model, preprocessors, None, None, None, None, None,"eval_run")
-    reward_arr, length_arr = agent.evaluate_detailed(env,eval_size,render=render, verbose=True)
+    reward_arr, length_arr = agent.evaluate_detailed(env,eval_size,render=False, verbose=True)
     print("\Ran {} Episodes, reward:M={}, SD={} length:M={}, SD={}".format(eval_size, np.mean(reward_arr),np.std(reward_arr),np.mean(length_arr), np.std(reward_arr)))
     print("max:{} min:{}".format(np.max(reward_arr), np.min(reward_arr)))
 
