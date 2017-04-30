@@ -135,6 +135,35 @@ class BaxterPreprocessor(Preprocessor):
         """
         return BaxterPreprocessor(self._new_size)
 
+class PendulumPreprocessor(Preprocessor):
+    """
+    Converts the state into a numpy object
+    """
+    def __init__(self):
+        self._name = "pendulum_preprocessor"
+
+    def process_state_for_network(self, state):
+        return self.converter(state, np.float32)
+
+    def process_state_for_memory(self, state):
+        return self.converter(state, np.uint8)
+
+
+    def converter(self, state, dtype):
+
+        #size is the length of history
+        hist_len = len(state)
+        arr = np.zeros((len(state[0]), hist_len))
+        for i in range(0, hist_len):
+            arr[:,i] = state[i]
+
+        return arr
+
+    def clone(self):
+        return PendulumPreprocessor()
+        #return NumpyPreprocessor()
+
+
 
 class NumpyPreprocessor(Preprocessor):
     """
