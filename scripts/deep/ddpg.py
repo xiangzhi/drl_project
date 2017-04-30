@@ -91,6 +91,11 @@ class DDPGAgent(object):
         self._sess.run(tf.global_variables_initializer())
 
 
+        # #model trainign callbacks
+        # self._log_dir = "{}-graph".format(self._run_name)
+        # self._actor_ = keras.callbacks.TensorBoard(log_dir=self._log_dir, histogram_freq=0, write_graph=True, write_images=True)
+
+
 
     def save_models(self):
         file_name = "{}.model".format(self._actor_network.name)
@@ -350,7 +355,7 @@ class DDPGAgent(object):
             curr_reward = 0
             #apply the action and save the reward
             next_state, reward, is_terminal, debug_info = env.step(curr_action)
-            curr_reward = reward
+            curr_reward = self._preprocessors.process_reward(reward)
             # #depend on how many frames we skip
             # for i in range(0, self._skip_frame):
             #   last_frame = curr_frame
@@ -362,7 +367,7 @@ class DDPGAgent(object):
             processed_next_state = self._preprocessors.process_state_for_memory(next_state)        
 
             #insert into memory
-            self._replay_memory.insert(processed_curr_state, processed_next_state, curr_action, self._preprocessors.process_reward(curr_reward), is_terminal)
+            self._replay_memory.insert(processed_curr_state, processed_next_state, curr_action, curr_reward, is_terminal)
 
 
             #update the policy
@@ -459,7 +464,7 @@ class DDPGAgent(object):
             if(is_terminal):
               break
             curr_state = next_state
-            curr_episode_reward += reward
+            curr_episode_reward += self._preprocessors_eval.process_reward(reward)
 
 
           print("Episode {} ended with length:{} and reward:{}".format(episode_num, curr_episode_step, curr_episode_reward))
