@@ -3,11 +3,12 @@
 import gym
 import time
 
-from keras.layers import (Activation, Convolution2D, Dense, Flatten, Input,
+from keras.layers import (Activation, Convolution2D, Dense, Flatten, Input, Lambda,
                           Permute)
 import keras.layers
 from keras.models import Model, Sequential
 from keras.optimizers import Adam
+from keras.initializers import RandomUniform 
 
 from deep.ddpg import DDPGAgent
 from deep.preprocessors import HistoryPreprocessor, PendulumPreprocessor, PreprocessorSequence
@@ -31,12 +32,16 @@ def create_actor_model(hist_window,state_size,action_dim,model_name):
     pendulum_input = Input(shape=(state_size,hist_window), name='actor_pendulum_input')
     merged_layer = Flatten()(pendulum_input)
     #bunch of dense layers
-    merged_layer = Dense(256,activation='relu')(merged_layer)
-    merged_layer = Dense(512,activation='relu')(merged_layer)
+    merged_layer = Dense(400,activation='relu')(merged_layer)
+    merged_layer = Dense(300,activation='relu')(merged_layer)
     #output layer
-    output_layer = Dense(action_dim,activation='tanh')(merged_layer)
+    uniform_initializer = RandomUniform(minval=-3e-3, maxval=3e-3)
+    output_layer = Dense(action_dim, activation='tanh', kernel_initializer=uniform_initializer)(merged_layer)
 
-    model = Model(inputs=pendulum_input, outputs=output_layer, name=model_name)
+
+    scaled_out_put_layer = Lambda(lambda x:x*2)(output_layer)
+   
+    model = Model(inputs=pendulum_input, outputs=scaled_out_put_layer, name=model_name)
 
     return model
 
@@ -46,19 +51,23 @@ def create_critic_model(hist_window,state_size,action_dim,model_name):
     pendulum_input = Input(shape=(state_size,hist_window), name='critic_pendulum_input')
     merged_layer = Flatten()(pendulum_input)
     #bunch of dense layers
-    merged_layer = Dense(256,activation='relu')(merged_layer)
-
+    merged_layer = Dense(400,activation='relu')(merged_layer)
+    #merged_layer = Dense(300,activation='relu')(merged_layer)
     #merge with the action
     #the actual output inputs
     action_input = Input(shape=(action_dim,),name='action_input')
+    #action_layer = Dense(300,activation='relu')(action_input)
     #action_layer = Flatten()(action_input)
     #merge all layers
+    #merged_layer = keras.layers.concatenate([merged_layer, action_layer])
     merged_layer = keras.layers.concatenate([merged_layer, action_input])
 
-    merged_layer = Dense(512,activation='relu')(merged_layer)
+    merged_layer = Dense(600,activation='relu')(merged_layer)
     #output layer
-    output_layer = Dense(action_dim,activation='linear')(merged_layer)
+    uniform_initializer = RandomUniform(minval=-3e-3, maxval=3e-3)
+    output_layer = Dense(action_dim, activation='linear', kernel_initializer=uniform_initializer)(merged_layer)
 
+    
     model = Model(inputs=[pendulum_input,action_input], outputs=output_layer, name=model_name)
 
     return model
@@ -81,14 +90,14 @@ def main():
     state_size = 3
     batch_size = 32
     action_dim = 1
-    memory_size = 100000
-    memory_burn_in_num = 50000
+    memory_size = 10000
+    memory_burn_in_num = 600
     start_epsilon = 1
     end_epsilon = 0.01
     decay_steps = 1000000
-    target_update_freq = 10000
+    target_update_freq = 1000
     train_freq = 4 #How often you train the network
-    history_size = 4
+    history_size = 1
     
     history_prep = HistoryPreprocessor(history_size)
     pendulum_prep  = PendulumPreprocessor()

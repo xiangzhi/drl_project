@@ -73,7 +73,6 @@ class DDPGAgent(object):
           #calculate the gradient of the critic network relative to the action selected
           #action_gradient = tf.gradients(self._critic_network.output, self._action_tf)
           grad_for_action = tf.gradients(self._critic_network.outputs, self._critic_network.inputs[1])[0]
-          print(grad_for_action)
           #print(action_gradient)
           # print(actions.shape)
           #print(action_gradient)
@@ -82,9 +81,12 @@ class DDPGAgent(object):
 
           #calculate the gradient of the actor network according to the critic weight 
           #action_gradient_tensor = tf.convert_to_tensor(action_gradient, dtype=tf.float32)
-          param_gradient = tf.gradients(self._actor_network.outputs,actor_weights, -grad_for_action)
+          param_gradient = tf.gradients(self._actor_network.outputs, actor_weights, -grad_for_action)
         # #print(param_gradient)
         # #print(actor_weights)
+
+
+
           self._actor_update_opt = opt.apply_gradients(zip(param_gradient, actor_weights))
 
         print("finish TF compile")
@@ -214,7 +216,9 @@ class DDPGAgent(object):
 
         Noise = thetas * (action - means) + sigma * wiener
 
-        return action + Noise 
+        return action + np.array([(1 / (1 + time_step))])
+
+        #return action + Noise 
 
 
     def update_step(self, total_step_num):
@@ -234,13 +238,14 @@ class DDPGAgent(object):
         # target_q_values = copy.deepcopy(curr_q_values)
 
         targeted_actions = self.select_actions(next_state_arr)
-        targeted_q_value = self.cal_q_values(next_state_arr,targeted_actions)
-
+        targeted_q_value = self.cal_q_values(next_state_arr,targeted_actions) #batch, size of actions
         y_values = np.zeros(np.shape(targeted_q_value))
 
         for i in range(0, np.size(reward_arr,0)):
+          y_values += reward_arr[i] #add to all actions's y value
           if(not terminal_arr[i]):
-            y_values += self._gamma * targeted_q_value[i]
+            y_values += self._gamma * targeted_q_value[i] #if not terminal, add the q_values for next state
+
 
         #first train the critic
         # joint_list = []
@@ -253,21 +258,19 @@ class DDPGAgent(object):
         # joint_input_x = np.array(joint_list)
         # image_input_x = np.array(image_input_list) 
 
-
-
         #update the critic network given the y value
         # training_loss = self._critic_network.train_on_batch({'image_input':image_input_x,
         #   'joint_input':joint_input_x,
         #   'action_input':action_arr
         #   }, y_values)
-        state = np.array(curr_state_arr)
-        training_loss = self._critic_network.train_on_batch({'critic_pendulum_input':state,
+        state_arr = np.array(curr_state_arr)
+        training_loss = self._critic_network.train_on_batch({'critic_pendulum_input':state_arr,
           'action_input':action_arr
           }, y_values)
 
         #update the actor network using sampled policy gradient
         #the action is predicted
-        actions = self._actor_network.predict({'actor_pendulum_input':state},batch_size=self._batch_size)
+        actions = self._actor_network.predict({'actor_pendulum_input':state_arr},batch_size=self._batch_size)
         #update the actor network
         # self._sess.run(self._actor_update_opt, feed_dict={
         #     self._action_tf:actions,
@@ -276,15 +279,15 @@ class DDPGAgent(object):
         # })
         self._sess.run(self._actor_update_opt, feed_dict={
           self._critic_network.inputs[1]:actions,
-          self._actor_network.inputs[0]:state,
-          self._critic_network.inputs[0]:state
+          self._actor_network.inputs[0]:state_arr,
+          self._critic_network.inputs[0]:state_arr
         })
    
         #check whether we want to update the target network
         if(total_step_num % self._target_update_freq == 0):
           self._target_actor_network = get_soft_target_model_updates(self._target_actor_network, self._actor_network, self._update_tau)
           self._target_critic_network = get_soft_target_model_updates(self._target_critic_network, self._critic_network, self._update_tau)
-          print("finish updating target networks")
+          print("\nfinish updating target networks")
         return training_loss
 
     def create_target_networks(self):
@@ -349,12 +352,15 @@ class DDPGAgent(object):
             #use the policy to select the action based on the state
             #TODO batch this for action
             curr_action = self.select_action(processed_curr_state)
+            print(curr_action)
             #add noise to the action
             curr_action = self.noise_update(curr_action,total_step_num)
 
             curr_reward = 0
             #apply the action and save the reward
             next_state, reward, is_terminal, debug_info = env.step(curr_action)
+            env.render()
+            #print(curr_action)
             curr_reward = self._preprocessors.process_reward(reward)
             # #depend on how many frames we skip
             # for i in range(0, self._skip_frame):
@@ -381,7 +387,7 @@ class DDPGAgent(object):
               #curr_policy = self._policy
               #self._policy = eval_policy
               #evaluate
-              avg_reward, avg_length = self.evaluate(env, self._eval_times, verbose=True)
+              avg_reward, avg_length = self.evaluate(env, self._eval_times, verbose=True, render=False)
               #set back the policy
               #self._policy = curr_policy
               #save the performance
@@ -422,7 +428,7 @@ class DDPGAgent(object):
         print("starting evaluation")
         reward_arr, length_arr = self.evaluate_detailed(env,num_episodes,max_episode_length,render,verbose)
         if(verbose):
-          print("finish evaulate, average reward:{}".format(np.mean(reward_arr)))
+          print("\nfinish evaulate, average reward:{}".format(np.mean(reward_arr)))
         return np.mean(reward_arr), np.mean(length_arr)
 
     def evaluate_detailed(self, env, num_episodes,max_episode_length=None, render=False, verbose=False):
@@ -458,7 +464,6 @@ class DDPGAgent(object):
             if(render):
               env.render()
             curr_episode_step += 1
-
             #progress and step through for a fix number of steps according the skip frame number
             next_state, reward, is_terminal, info = env.step(curr_action)
             if(is_terminal):
@@ -467,11 +472,11 @@ class DDPGAgent(object):
             curr_episode_reward += self._preprocessors_eval.process_reward(reward)
 
 
-          print("Episode {} ended with length:{} and reward:{}".format(episode_num, curr_episode_step, curr_episode_reward))
+          #print("Episode {} ended with length:{} and reward:{}".format(episode_num, curr_episode_step, curr_episode_reward))
           reward_arr[episode_num] = curr_episode_reward
           length_arr[episode_num] = curr_episode_step
 
           if(verbose):
-            sys.stdout.write("\revaluating game: {}/{}".format(episode_num+1, num_episodes))
+            sys.stdout.write("\revaluating game: {}/{} length:{} and reward:{}".format(episode_num+1, num_episodes, curr_episode_step, curr_episode_reward))
             sys.stdout.flush()
         return reward_arr, length_arr

@@ -41,7 +41,7 @@ def main():
 
     epsilon = 0.01
     input_shape = (80,80)
-    history_size = 4
+    history_size = 1
     eval_size = 100
 
     history_prep = HistoryPreprocessor(history_size)

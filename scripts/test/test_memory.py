@@ -1,6 +1,6 @@
 import unittest
 
-from deeprl_hw2.action_replay_memory import ActionReplayMemory
+from deep.action_replay_memory import ActionReplayMemory
 import numpy as np
 
 
