@@ -44,7 +44,7 @@ class DDPGAgent(object):
       self._eval_freq = 2000 #how many steps before we do evaluation
       self._action_dim = 7  
       self._checkin_freq = 10000
-      self._update_tau = 0.001
+      self._update_tau = 0.001 
       
       #we make a copy of the preprocessor just for evaluation
       self._preprocessors_eval = self._preprocessors.clone()
@@ -60,21 +60,34 @@ class DDPGAgent(object):
 
         #generate the tf code for running the policy gradient update
         actor_weights = self._actor_network.trainable_weights
-
+        critic_weights = self._critic_network.trainable_weights
+        print("start TF compile")
         with tf.name_scope("update_scope"):
           #create an optimizer
           opt = tf.train.AdamOptimizer()
           #compute the gradients of the ac
-          self._action_tf = tf.placeholder(tf.float32, shape=(None,7))
+          self._action_tf = tf.placeholder(tf.float32, shape=(None,1))
           #action_weights_tf = tf.placeholder()
-          action_gradient = tf.gradients(self._critic_network.outputs, self._action_tf)
-          # print(self._critic_network.outputs)
+
+
+          #calculate the gradient of the critic network relative to the action selected
+          #action_gradient = tf.gradients(self._critic_network.output, self._action_tf)
+          grad_for_action = tf.gradients(self._critic_network.outputs, self._critic_network.inputs[1])[0]
+          print(grad_for_action)
+          #print(action_gradient)
           # print(actions.shape)
-          param_gradient = tf.gradients(self._actor_network.output,actor_weights, action_gradient)
+          #print(action_gradient)
+          #action_gradient = [(tf.scalar_mul(-1,grad[0]),grad[1]) for grad in action_gradient]
+          #action_gradient = tf.scalar_mul(-1, action_gradient)
+
+          #calculate the gradient of the actor network according to the critic weight 
+          #action_gradient_tensor = tf.convert_to_tensor(action_gradient, dtype=tf.float32)
+          param_gradient = tf.gradients(self._actor_network.outputs,actor_weights, -grad_for_action)
         # #print(param_gradient)
         # #print(actor_weights)
           self._actor_update_opt = opt.apply_gradients(zip(param_gradient, actor_weights))
 
+        print("finish TF compile")
         self._sess.run(tf.global_variables_initializer())
 
 
@@ -115,59 +128,70 @@ class DDPGAgent(object):
         selected action
         """
 
-        #run the actor network to get the values
-        joint_input = np.array([state[0]]) #this will be a (7,4) list
-        #joint_angles = state[0] #this will be a (7,4) list
-        image_input = np.array([state[1]]) #this will be a (80,80,3,4) array
-        #image_input = state[1] #this will be a (80,80,3,4) array
-        actions = self._actor_network.predict({'image_input':image_input,
-          'joint_input':joint_input
-          }, batch_size=1)
+        # #run the actor network to get the values
+        # joint_input = np.array([state[0]]) #this will be a (7,4) list
+        # #joint_angles = state[0] #this will be a (7,4) list
+        # image_input = np.array([state[1]]) #this will be a (80,80,3,4) array
+        # #image_input = state[1] #this will be a (80,80,3,4) array
+        # actions = self._actor_network.predict({'image_input':image_input,
+        #   'joint_input':joint_input
+        #   }, batch_size=1)
         #actions = self._actor_network.predict([[joint_angles],[image_input]],batch_size=1)
-        return actions[0].tolist()
+        actions = self._actor_network.predict({'actor_pendulum_input':np.array([state])}, batch_size=1)
 
+        return actions[0].tolist()
 
     def cal_q_values(self, states, action_arr):
         """
         Calculate the q values of each state and action using the critic network 
         """
-        joint_angles_list = []
-        image_input_list = []
+        # joint_angles_list = []
+        # image_input_list = []
 
-        for state in states:
-          joint_angles_list.append(state[0])
-          image_input_list.append(state[1])
+        # for state in states:
+        #   joint_angles_list.append(state[0])
+        #   image_input_list.append(state[1])
 
-        joint_input = np.array(joint_angles_list)
-        image_input = np.array(image_input_list)
+        # joint_input = np.array(joint_angles_list)
+        # image_input = np.array(image_input_list)
 
-        #get the q_values from the state and action pair from the critic network
-        q_values = self._target_critic_network.predict({'image_input':image_input,
-          'joint_input':joint_input,
+
+        # #get the q_values from the state and action pair from the critic network
+        # q_values = self._target_critic_network.predict({'image_input':image_input,
+        #   'joint_input':joint_input,
+        #   'action_input':action_arr
+        #   }, batch_size=self._batch_size)
+
+        # #set to the critic network
+        # return q_values
+
+
+        q_values = self._target_critic_network.predict({
+          'critic_pendulum_input':np.array(states),
           'action_input':action_arr
           }, batch_size=self._batch_size)
-
-        #set to the critic network
         return q_values
 
     def select_actions(self, states):
         """
         Calculate the q values of each state and action using the critic network 
         """
-        joint_angles_list = []
-        image_input_list = []
+        # joint_angles_list = []
+        # image_input_list = []
 
-        for state in states:
-          joint_angles_list.append(state[0])
-          image_input_list.append(state[1])
+        # for state in states:
+        #   joint_angles_list.append(state[0])
+        #   image_input_list.append(state[1])
 
-        joint_input = np.array(joint_angles_list)
-        image_input = np.array(image_input_list)
+        # joint_input = np.array(joint_angles_list)
+        # image_input = np.array(image_input_list)
 
-        #get the q_values from the state and action pair from the critic network
-        actions = self._target_actor_network.predict({'image_input':image_input,
-          'joint_input':joint_input
-          }, batch_size=self._batch_size)
+        # #get the q_values from the state and action pair from the critic network
+        # actions = self._target_actor_network.predict({'image_input':image_input,
+        #   'joint_input':joint_input
+        #   }, batch_size=self._batch_size)
+
+        actions = self._target_actor_network.predict({'actor_pendulum_input':np.array(states)}, batch_size=self._batch_size)
 
         #set to the critic network
         return actions
@@ -214,31 +238,41 @@ class DDPGAgent(object):
             y_values += self._gamma * targeted_q_value[i]
 
         #first train the critic
-        joint_list = []
-        image_input_list = []
+        # joint_list = []
+        # image_input_list = []
 
-        for state in curr_state_arr:
-          joint_list.append(state[0])
-          image_input_list.append(state[1])
+        # for state in curr_state_arr:
+        #   joint_list.append(state[0])
+        #   image_input_list.append(state[1])
 
-        joint_input_x = np.array(joint_list)
-        image_input_x = np.array(image_input_list) 
+        # joint_input_x = np.array(joint_list)
+        # image_input_x = np.array(image_input_list) 
+
+
+
         #update the critic network given the y value
-        training_loss = self._critic_network.train_on_batch({'image_input':image_input_x,
-          'joint_input':joint_input_x,
+        # training_loss = self._critic_network.train_on_batch({'image_input':image_input_x,
+        #   'joint_input':joint_input_x,
+        #   'action_input':action_arr
+        #   }, y_values)
+        state = np.array(curr_state_arr)
+        training_loss = self._critic_network.train_on_batch({'critic_pendulum_input':state,
           'action_input':action_arr
           }, y_values)
 
         #update the actor network using sampled policy gradient
         #the action is predicted
-        actions = self._actor_network.predict({'image_input':image_input_x,
-          'joint_input':joint_input_x
-          },batch_size=self._batch_size)
+        actions = self._actor_network.predict({'actor_pendulum_input':state},batch_size=self._batch_size)
         #update the actor network
+        # self._sess.run(self._actor_update_opt, feed_dict={
+        #     self._action_tf:actions,
+        #     self._actor_network.inputs[0]:image_input_x,
+        #     self._actor_network.inputs[1]:joint_input_x
+        # })
         self._sess.run(self._actor_update_opt, feed_dict={
-            self._action_tf:actions,
-            self._actor_network.inputs[0]:image_input_x,
-            self._actor_network.inputs[1]:joint_input_x
+          self._critic_network.inputs[1]:actions,
+          self._actor_network.inputs[0]:state,
+          self._critic_network.inputs[0]:state
         })
    
         #check whether we want to update the target network
@@ -382,6 +416,8 @@ class DDPGAgent(object):
         """
         print("starting evaluation")
         reward_arr, length_arr = self.evaluate_detailed(env,num_episodes,max_episode_length,render,verbose)
+        if(verbose):
+          print("finish evaulate, average reward:{}".format(np.mean(reward_arr)))
         return np.mean(reward_arr), np.mean(length_arr)
 
     def evaluate_detailed(self, env, num_episodes,max_episode_length=None, render=False, verbose=False):
@@ -426,12 +462,11 @@ class DDPGAgent(object):
             curr_episode_reward += reward
 
 
-          #print("Episode {} ended with length:{} and reward:{}".format(episode_num, curr_episode_step, curr_episode_reward))
+          print("Episode {} ended with length:{} and reward:{}".format(episode_num, curr_episode_step, curr_episode_reward))
           reward_arr[episode_num] = curr_episode_reward
           length_arr[episode_num] = curr_episode_step
 
           if(verbose):
             sys.stdout.write("\revaluating game: {}/{}".format(episode_num+1, num_episodes))
             sys.stdout.flush()
-
         return reward_arr, length_arr
