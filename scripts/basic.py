@@ -82,7 +82,7 @@ def create_critic_model(hist_window,img_input_shape,action_dim,model_name):
     merged_layer = Dense(256,activation='relu')(merged_layer)
 
     #output layer
-    output_layer = Dense(action_dim,activation='tanh')(merged_layer)
+    output_layer = Dense(action_dim,activation='linear')(merged_layer)
 
     model = Model(inputs=[main_input,joint_input,action_input], outputs=output_layer, name=model_name)
 
