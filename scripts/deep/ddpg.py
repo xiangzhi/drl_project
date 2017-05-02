@@ -39,7 +39,7 @@ class DDPGAgent(object):
       self._gamma = gamma
       self._batch_size = batch_size
 
-      self._eval_times = 10 #how many episodes we run to evaluate the network
+      self._eval_times = 20 #how many episodes we run to evaluate the network
       self._eval_freq = 2000 #how many steps before we do evaluation
       self._action_dim = 7  
       self._checkin_freq = 10000
@@ -83,17 +83,16 @@ class DDPGAgent(object):
 
           #calculate the gradient of the actor network according to the critic weight 
           #action_gradient_tensor = tf.convert_to_tensor(action_gradient, dtype=tf.float32)
-          param_gradient = tf.gradients(self._actor_network.outputs, actor_weights, -grad_for_action)
+          param_gradient = tf.gradients(self._actor_network.outputs, self._actor_network.trainable_weights, -grad_for_action)
         # #print(param_gradient)
         # #print(actor_weights)
 
 
 
-          self._actor_update_opt = opt.apply_gradients(zip(param_gradient, actor_weights))
+          self._actor_update_opt = opt.apply_gradients(zip(param_gradient, self._actor_network.trainable_weights))
 
         print("finish TF compile")
         self._sess.run(tf.global_variables_initializer())
-
 
         # #model trainign callbacks
         # self._log_dir = "{}-graph".format(self._run_name)
@@ -138,7 +137,7 @@ class DDPGAgent(object):
         """
 
         #set the backend to test phase
-        K.set_learning_phase(0)
+        #K.set_learning_phase(0)
         #run the actor network to get the values
         actions = self._actor_network.predict(state, batch_size=1)
         return actions[0].tolist()
@@ -166,22 +165,19 @@ class DDPGAgent(object):
         actions = self._target_actor_network.predict(states, batch_size=self._batch_size)
         return actions
 
+
+    def set_noise_generator(self, noise_generator):
+        #the noise generator will be a object with the method generate
+        self._noise_generator = noise_generator
+
+
     def noise_update(self, action, time_step):
         """
-        Given an action, we will add noise to it. Uses Ornstein-Uhlenbeck as recommended in the paper 
+        Given an action, we will add noise to it according to the genrator
         """
-        means = np.zeros(np.shape(action)) #all means are zero, so no movement around
-        thetas = np.ones(np.shape(action)) * 0.15
-        sigma = np.ones(np.shape(action)) * 0.2
 
-        #calculate the weiner number
-        wiener = np.random.randn(np.size(action)) #we can do this because Wiener process has a gaussian increment
-
-        Noise = thetas * (means - action) + sigma * wiener
-
-        #return action + np.array([(1. / (1. + time_step))])
-
-        return action + Noise 
+        noise = self._noise_generator.generate(action, time_step)
+        return action + noise
 
 
     def update_step(self, total_step_num):
@@ -327,9 +323,11 @@ class DDPGAgent(object):
             #insert into memory
             self._replay_memory.insert(processed_curr_state_mem, processed_next_state_mem, curr_action, curr_reward, is_terminal)
 
-            #update the networks
-            training_loss = self.update_step(total_step_num)
-            cumulative_loss += training_loss
+
+            #update the networks only if the replay memory > batch size
+            if(len(self._replay_memory) > self._batch_size):
+              training_loss = self.update_step(total_step_num)
+              cumulative_loss += training_loss
 
             #check if we should run an evaluation step and save the rewards
             if(total_step_num != 0 and total_step_num % self._eval_freq == 0):
@@ -410,7 +408,8 @@ class DDPGAgent(object):
             curr_action = self.select_action(processed_curr_state)
             #clip the action
             curr_action = np.clip(curr_action,env.action_space.low,env.action_space.high)
-
+            print(curr_action)
+            #curr_action = np.array([0])
             if(render):
               env.render()
             curr_episode_step += 1

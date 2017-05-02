@@ -8,6 +8,7 @@ from keras.layers import (Activation, Convolution2D, Dense, Flatten, Input,
 import keras.layers
 from keras.models import Model, Sequential
 from keras.optimizers import Adam
+from keras.initializers import VarianceScaling, RandomUniform
 
 from deep.ddpg import DDPGAgent
 from deep.preprocessors import PreprocessorSequence, HistoryPreprocessor, BaxterPreprocessor, NumpyPreprocessor, KerasPreprocessor
@@ -35,14 +36,12 @@ register(
 
 def create_actor_model(hist_window,img_input_shape,action_dim,model_name):
 
-    #main_input = Input(shape=(hist_window, img_input_shape[0], img_input_shape[1]), name='image_input')
+    #image_inputs
     main_input = Input(shape=(img_input_shape[0], img_input_shape[1],img_input_shape[2]), name='image_input')
-    layers = Convolution2D(filters=32, kernel_size=8, strides=4, activation='relu')(main_input)
+    layers = Convolution2D(filters=32, kernel_size=8, strides=4, activation='relu', kernel_initializer=VarianceScaling(distribution='uniform'))(main_input)
     img_out_layer = Convolution2D(filters=32, kernel_size=8, strides=4, activation='relu')(layers)
+    img_out_layer = Convolution2D(filters=32, kernel_size=3, strides=1, activation='relu')(layers)
     img_out_layer = Flatten()(img_out_layer)
-    # layers = Convolution2D(filters=64, kernel_size=4, strides=2, activation='relu')(layers)
-    # layers = Convolution2D(filters=64, kernel_size=3, strides=1, activation='relu')(layers)
-    #image layers
 
     #action inputs
     joint_input = Input(shape=(action_dim,hist_window),name='joint_input')
@@ -51,21 +50,25 @@ def create_actor_model(hist_window,img_input_shape,action_dim,model_name):
     #merge both layers
     merged_layer = keras.layers.concatenate([joint_layer, img_out_layer])
     merged_layer = Dense(256,activation='relu')(merged_layer)
+    merged_layer = Dense(256,activation='relu')(merged_layer)
 
     #output layer
-    output_layer = Dense(action_dim,activation='tanh')(merged_layer)
+    uniform_initializer = RandomUniform(minval=-3e-4, maxval=3e-4)
+    output_layer = Dense(action_dim, activation='tanh', kernel_initializer=uniform_initializer)(merged_layer)
 
-    model = Model(inputs=[main_input,joint_input], outputs=output_layer, name=model_name)
+    #QUICK hack to deal with the problem of velocity kept getting clipped
+    scaled_out_put_layer = Lambda(lambda x:x*0.3)(output_layer)
+    model = Model(inputs=[main_input,joint_input], outputs=scaled_out_put_layer, name=model_name)
 
     return model
 
 def create_critic_model(hist_window,img_input_shape,action_dim,model_name):
 
+    #image inputs
     main_input = Input(shape=(img_input_shape[0], img_input_shape[1],img_input_shape[2]), name='image_input')
     layers = Convolution2D(filters=32, kernel_size=8, strides=4, activation='relu')(main_input)
-    img_out_layer = Convolution2D(filters=32, kernel_size=4, strides=2, activation='relu')(layers)
-    # layers = Convolution2D(filters=64, kernel_size=3, strides=1, activation='relu')(layers)
-    #image layers
+    img_out_layer = Convolution2D(filters=32, kernel_size=8, strides=4, activation='relu')(layers)
+    img_out_layer = Convolution2D(filters=32, kernel_size=3, strides=1, activation='relu')(layers)
     img_out_layer = Flatten()(img_out_layer)
 
     #action inputs
@@ -73,16 +76,21 @@ def create_critic_model(hist_window,img_input_shape,action_dim,model_name):
     joint_layer = Dense(64,activation='relu')(joint_input)
     joint_layer = Flatten()(joint_layer)
 
+    #merge and add first hidden layer
+    merged_layer = keras.layers.concatenate([joint_layer, img_out_layer])
+    merged_layer = Dense(256,activation='relu')(merged_layer)
+
     #the actual output inputs
     action_input = Input(shape=(action_dim,),name='action_input')
     #action_layer = Flatten()(action_input)
 
     #merge all three layers
-    merged_layer = keras.layers.concatenate([joint_layer, img_out_layer, action_input])
+    merged_layer = keras.layers.concatenate([merged_layer, action_input])
     merged_layer = Dense(256,activation='relu')(merged_layer)
 
     #output layer
-    output_layer = Dense(action_dim,activation='linear')(merged_layer)
+    uniform_initializer = RandomUniform(minval=-3e-4, maxval=3e-4)
+    output_layer = Dense(action_dim, activation='linear', kernel_initializer=uniform_initializer)(merged_layer)
 
     model = Model(inputs=[main_input,joint_input,action_input], outputs=output_layer, name=model_name)
 
