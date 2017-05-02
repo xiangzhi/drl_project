@@ -3,7 +3,7 @@
 import gym
 import time
 
-from keras.layers import (Activation, Convolution2D, Dense, Flatten, Input,
+from keras.layers import (Activation, Convolution2D, Dense, Flatten, Input, Lambda,
                           Permute)
 import keras.layers
 from keras.models import Model, Sequential
@@ -17,7 +17,7 @@ from deep.policy import LinearDecayGreedyEpsilonPolicy, UniformRandomPolicy
 from deep.action_replay_memory import ActionReplayMemory
 from deep.objectives import huber_loss
 from deep.utils import memory_burn_in
-
+from deep.noise_generator import OU_Generator
 import numpy as np
 import json
 import sys
@@ -134,6 +134,7 @@ def main():
     optimizer = Adam(lr=critic_learning_rate, beta_1=0.9, beta_2=0.999, epsilon=1e-08, decay=0.0)
     loss_func = huber_loss
 
+    noise_generator = OU_Generator(np.zeros(action_dim))
 
     #memory = ActionReplayMemory(1000000,4)
     memory = ActionReplayMemory(memory_size,4)
@@ -142,6 +143,7 @@ def main():
 
     agent = DDPGAgent(sess,actor_model, critic_model, preprocessors, memory, 0.99, batch_size,run_name)
     agent.compile(optimizer, loss_func, actor_learning_rate,2,action_dim)
+    agent.set_noise_generator(noise_generator)
 
     agent.fit(env,1000000,100000)
     #agent.evaluate(env, 5)

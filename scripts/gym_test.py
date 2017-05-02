@@ -121,11 +121,11 @@ def main():
     #batch_size = 64
     batch_size = 32
     action_dim = env.action_space.shape[0]
-    memory_size = 20000
+    #memory_size = 20000
     memory_size = int(1e6)
-    #memory_burn_in_num = int(memory_size*0.05)# 5% of the whole memory
+    memory_burn_in_num = int(memory_size*0.05)# 5% of the whole memory
     #memory_burn_in_num = 5000
-    memory_burn_in_num = 0
+    #memory_burn_in_num = 0
     history_size = 1
     #scale = np.min(env.action_space.high)
     scale = np.min(env.action_space.high)
