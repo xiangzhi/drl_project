@@ -25,9 +25,7 @@ class DDPGAgent(object):
                  critic_network,
                  preprocessors,
                  memory,
-                 policy,
                  gamma,
-                 target_update_freq,
                  batch_size,
                  run_name):
 
@@ -38,9 +36,7 @@ class DDPGAgent(object):
       self._critic_network = critic_network
       self._preprocessors = preprocessors
       self._replay_memory = memory
-      self._policy = policy
       self._gamma = gamma
-      self._target_update_freq = target_update_freq
       self._batch_size = batch_size
 
       self._eval_times = 10 #how many episodes we run to evaluate the network
@@ -56,10 +52,10 @@ class DDPGAgent(object):
       self._performance_recorder = []
    
    
-    def compile(self, optimizer, loss_func):
+    def compile(self, critic_optimizer,critic_loss_func, actor_learning_rate):
 
         #compile the Keras model here
-        self._critic_network.compile(loss=loss_func, optimizer=optimizer)
+        self._critic_network.compile(loss=critic_loss_func, optimizer=critic_optimizer)
 
         #generate the tf code for running the policy gradient update
         actor_weights = self._actor_network.trainable_weights
@@ -67,7 +63,7 @@ class DDPGAgent(object):
         print("start TF compile")
         with tf.name_scope("update_scope"):
           #create an optimizer
-          opt = tf.train.AdamOptimizer(learning_rate=0.01)
+          opt = tf.train.AdamOptimizer(learning_rate=actor_learning_rate)
           #opt = optimizers.Adam(lr=0.01)
           #compute the gradients of the ac
           self._action_tf = tf.placeholder(tf.float32, shape=(None,1))
@@ -296,11 +292,9 @@ class DDPGAgent(object):
           self._critic_network.inputs[0]:state_arr,
         })
 
-        #check whether we want to update the target network
-        if(total_step_num % self._target_update_freq == 0):
-          self._target_actor_network = get_soft_target_model_updates(self._target_actor_network, self._actor_network, self._update_tau)
-          self._target_critic_network = get_soft_target_model_updates(self._target_critic_network, self._critic_network, self._update_tau)
-          #print("\nfinish updating target networks")
+        #update target network
+        self._target_actor_network = get_soft_target_model_updates(self._target_actor_network, self._actor_network, self._update_tau)
+        self._target_critic_network = get_soft_target_model_updates(self._target_critic_network, self._critic_network, self._update_tau)
 
         #K.set_learning_phase(0) #set learning phase
 
