@@ -11,7 +11,7 @@ from keras.optimizers import Adam
 from keras.initializers import RandomUniform 
 
 from deep.ddpg import DDPGAgent
-from deep.preprocessors import HistoryPreprocessor, PendulumPreprocessor, PreprocessorSequence
+from deep.preprocessors import HistoryPreprocessor, PendulumPreprocessor, PreprocessorSequence, KerasPreprocessor
 from deep.policy import LinearDecayGreedyEpsilonPolicy, UniformRandomPolicy
 #from deeprl_hw2.action_replay_memory import ActionReplayMemory
 from deep.action_replay_memory import ActionReplayMemory
@@ -30,7 +30,7 @@ from keras.layers.normalization import BatchNormalization
 def create_actor_model(hist_window,state_size,action_dim,model_name):
 
     #the current pendulum state
-    pendulum_input = Input(shape=(state_size,hist_window), name='actor_pendulum_input')
+    pendulum_input = Input(shape=(state_size,hist_window), name='pendulum_input')
     merged_layer = Flatten()(pendulum_input)
     #merged_layer = BatchNormalization(axis=1)(merged_layer)
     #bunch of dense layers
@@ -48,7 +48,7 @@ def create_actor_model(hist_window,state_size,action_dim,model_name):
     output_layer = Dense(action_dim, activation='tanh', kernel_initializer=uniform_initializer)(merged_layer)
 
 
-    scaled_out_put_layer = Lambda(lambda x:x*2)(output_layer)
+    scaled_out_put_layer = Lambda(lambda x:x*1)(output_layer)
    
     model = Model(inputs=pendulum_input, outputs=scaled_out_put_layer, name=model_name)
 
@@ -57,7 +57,7 @@ def create_actor_model(hist_window,state_size,action_dim,model_name):
 def create_critic_model(hist_window,state_size,action_dim,model_name):
 
    #the current pendulum state
-    pendulum_input = Input(shape=(state_size,hist_window), name='critic_pendulum_input')
+    pendulum_input = Input(shape=(state_size,hist_window), name='pendulum_input')
     merged_layer = Flatten()(pendulum_input)
     #merged_layer = BatchNormalization()(merged_layer)
     #bunch of dense layers
@@ -100,6 +100,7 @@ def main():
 
     env_name = "Pendulum-v0"
     #env_name = "MountainCarContinuous-v0"
+    env_name = "LunarLanderContinuous-v2"
 
     env = gym.make(env_name)
     run_name = '{}-{}'.format(env_name,1)
@@ -110,8 +111,10 @@ def main():
     K.set_learning_phase(1)
 
     state_size = env.observation_space.shape[0]
-    batch_size = 64
+    batch_size = 32
     action_dim = env.action_space.shape[0]
+    print(action_dim)
+    print(state_size)
     memory_size = 20000
     memory_burn_in_num = 1000
     history_size = 1
@@ -121,9 +124,10 @@ def main():
     
     history_prep = HistoryPreprocessor(history_size)
     pendulum_prep  = PendulumPreprocessor()
+    keras_prep = KerasPreprocessor(['pendulum_input'])
     #baxter_prep = BaxterPreprocessor(input_shape)
     #numpy_prep = NumpyPreprocessor()
-    preprocessors = PreprocessorSequence([history_prep,pendulum_prep]) #from left to right
+    preprocessors = PreprocessorSequence([history_prep,pendulum_prep,keras_prep]) #from left to right
 
     actor_model = create_actor_model(history_size,state_size,action_dim,'actor_model_{}'.format(run_name,))
     critic_model = create_critic_model(history_size,state_size,action_dim,'critic_model_{}'.format(run_name,))
@@ -131,15 +135,15 @@ def main():
     # linear_model = create_model(history_size, input_shape, action_dim, model_name)
     # linear_model.summary()
     optimizer = Adam(lr=critic_learning_rate, beta_1=0.9, beta_2=0.999, epsilon=1e-08, decay=0.0)
-    #loss_func = huber_loss
-    loss_func = 'mse'
+    loss_func = huber_loss
+    #loss_func = 'mse'
     #memory = ActionReplayMemory(1000000,4)
     memory = ActionReplayMemory(memory_size,4)
     memory_burn_in(env,memory,preprocessors,memory_burn_in_num)
 
 
     agent = DDPGAgent(sess,actor_model, critic_model, preprocessors, memory, 0.99, batch_size,run_name)
-    agent.compile(optimizer, loss_func, actor_learning_rate)
+    agent.compile(optimizer, loss_func, actor_learning_rate,1,action_dim)
 
 
 

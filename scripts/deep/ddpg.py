@@ -52,7 +52,7 @@ class DDPGAgent(object):
       self._performance_recorder = []
    
    
-    def compile(self, critic_optimizer,critic_loss_func, actor_learning_rate):
+    def compile(self, critic_optimizer,critic_loss_func, actor_learning_rate,critic_input_num,action_dim):
 
         #compile the Keras model here
         self._critic_network.compile(loss=critic_loss_func, optimizer=critic_optimizer)
@@ -66,13 +66,15 @@ class DDPGAgent(object):
           opt = tf.train.AdamOptimizer(learning_rate=actor_learning_rate)
           #opt = optimizers.Adam(lr=0.01)
           #compute the gradients of the ac
-          self._action_tf = tf.placeholder(tf.float32, shape=(None,1))
+          self._action_tf = tf.placeholder(tf.float32, shape=(None,action_dim))
           #action_weights_tf = tf.placeholder()
 
 
           #calculate the gradient of the critic network relative to the action selected
           #action_gradient = tf.gradients(self._critic_network.output, self._action_tf)
-          grad_for_action = tf.gradients(self._critic_network.outputs, self._critic_network.inputs[1])[0]
+
+          #TODO !!! Change this!!!!!
+          grad_for_action = tf.gradients(self._critic_network.outputs, self._critic_network.inputs[critic_input_num])[0]
           #print(action_gradient)
           # print(actions.shape)
           #print(action_gradient)
@@ -135,74 +137,33 @@ class DDPGAgent(object):
         selected action
         """
 
-        # #run the actor network to get the values
-        # joint_input = np.array([state[0]]) #this will be a (7,4) list
-        # #joint_angles = state[0] #this will be a (7,4) list
-        # image_input = np.array([state[1]]) #this will be a (80,80,3,4) array
-        # #image_input = state[1] #this will be a (80,80,3,4) array
-        # actions = self._actor_network.predict({'image_input':image_input,
-        #   'joint_input':joint_input
-        #   }, batch_size=1)
-        #actions = self._actor_network.predict([[joint_angles],[image_input]],batch_size=1)
+        #set the backend to test phase
         K.set_learning_phase(0)
-        actions = self._actor_network.predict({'actor_pendulum_input':np.array([state])}, batch_size=1)
-
+        #run the actor network to get the values
+        actions = self._actor_network.predict(state, batch_size=1)
         return actions[0].tolist()
 
     def cal_q_values(self, states, action_arr):
         """
         Calculate the q values of each state and action using the critic network 
         """
-        # joint_angles_list = []
-        # image_input_list = []
-
-        # for state in states:
-        #   joint_angles_list.append(state[0])
-        #   image_input_list.append(state[1])
-
-        # joint_input = np.array(joint_angles_list)
-        # image_input = np.array(image_input_list)
-
-
-        # #get the q_values from the state and action pair from the critic network
-        # q_values = self._target_critic_network.predict({'image_input':image_input,
-        #   'joint_input':joint_input,
-        #   'action_input':action_arr
-        #   }, batch_size=self._batch_size)
-
-        # #set to the critic network
-        # return q_values
-
+        #set the backend to test phase
         K.set_learning_phase(0)
-        q_values = self._target_critic_network.predict({
-          'critic_pendulum_input':np.array(states),
-          'action_input':action_arr
-          }, batch_size=self._batch_size)
+        #make sure the states is a new instance
+        states = copy.deepcopy(states)
+        #append the action inputs
+        states['action_input'] = action_arr
+        #get the q_values from network
+        q_values = self._target_critic_network.predict(states,batch_size=self._batch_size)
         return q_values
 
     def select_actions(self, states):
         """
         Calculate the q values of each state and action using the critic network 
         """
-        # joint_angles_list = []
-        # image_input_list = []
-
-        # for state in states:
-        #   joint_angles_list.append(state[0])
-        #   image_input_list.append(state[1])
-
-        # joint_input = np.array(joint_angles_list)
-        # image_input = np.array(image_input_list)
-
-        # #get the q_values from the state and action pair from the critic network
-        # actions = self._target_actor_network.predict({'image_input':image_input,
-        #   'joint_input':joint_input
-        #   }, batch_size=self._batch_size)
 
         K.set_learning_phase(0)
-        actions = self._target_actor_network.predict({'actor_pendulum_input':np.array(states)}, batch_size=self._batch_size)
-
-        #set to the critic network
+        actions = self._target_actor_network.predict(states, batch_size=self._batch_size)
         return actions
 
     def noise_update(self, action, time_step):
@@ -230,74 +191,60 @@ class DDPGAgent(object):
 
         #K.set_learning_phase(1) #set learning phase
         #first sample from memory
-        curr_state_arr, next_state_arr, action_list, reward_list, terminal_list  = self._replay_memory.sample(self._batch_size)
+        _curr_state_arr, _next_state_arr, action_list, reward_list, terminal_list  = self._replay_memory.sample(self._batch_size)
+
         #process all the inputs to make sure they are in the right format
-        curr_state_arr = self._preprocessors.process_batch(curr_state_arr)
-        next_state_arr = self._preprocessors.process_batch(next_state_arr)        
+        curr_states = self._preprocessors.process_batch(_curr_state_arr)
+        next_states = self._preprocessors.process_batch(_next_state_arr)
         action_arr = np.array(action_list)
-        #calculate the q value using the target critic network
-        #first get the base q_values from the target critic network
-        # curr_q_values = self.cal_q_values(curr_state_arr, action_arr)
-        # target_q_values = copy.deepcopy(curr_q_values)
 
-        #print(curr_state_arr)
 
-        targeted_actions = self.select_actions(next_state_arr)
-        targeted_q_value = self.cal_q_values(next_state_arr,targeted_actions) #batch, size of actions
+        #calculate the Q values for next state
+        targeted_actions = self.select_actions(next_states)
+        targeted_q_value = self.cal_q_values(next_states,targeted_actions) #batch, size of actions
+
+        #calculate the true Q value at the current state
         y_values = np.zeros(np.shape(targeted_q_value))
-
         for i in range(len(reward_list)):
           y_values[i] = reward_list[i] #add to all actions's y value
           if(not terminal_list[i]):
             y_values[i] += self._gamma * targeted_q_value[i] #if not terminal, add the q_values for next state
 
 
-        #first train the critic
-        # joint_list = []
-        # image_input_list = []
-
-        # for state in curr_state_arr:
-        #   joint_list.append(state[0])
-        #   image_input_list.append(state[1])
-
-        # joint_input_x = np.array(joint_list)
-        # image_input_x = np.array(image_input_list) 
-
-        #update the critic network given the y value
-        # training_loss = self._critic_network.train_on_batch({'image_input':image_input_x,
-        #   'joint_input':joint_input_x,
-        #   'action_input':action_arr
-        #   }, y_values)
-
+        #set backend to learning phase
         K.set_learning_phase(1)
-        state_arr = np.array(curr_state_arr)
-        training_loss = self._critic_network.train_on_batch({'critic_pendulum_input':state_arr,
-          'action_input':action_arr
-          }, y_values)
+        #make sure critic object is new and append action inputs
+        critic_obj = copy.deepcopy(curr_states)
+        #add action inputs
+        critic_obj['action_input'] = action_arr.copy()
+        #train critic network
+        training_loss = self._critic_network.train_on_batch(critic_obj, y_values)
 
-        #update the actor network using sampled policy gradient
-        #the action is predicted
+        # ------------- update actor network -----------------------------------#
+        #set it back to test phase to get actions based on actor
         K.set_learning_phase(0)
-        actions = self._actor_network.predict({'actor_pendulum_input':state_arr},batch_size=self._batch_size)
-        #update the actor network
-        # self._sess.run(self._actor_update_opt, feed_dict={
-        #     self._action_tf:actions,
-        #     self._actor_network.inputs[0]:image_input_x,
-        #     self._actor_network.inputs[1]:joint_input_x
-        # })
+        #get action at current state
+        actions = self._actor_network.predict(curr_states,batch_size=self._batch_size)
+        #set back to learning
         K.set_learning_phase(1)
-        self._sess.run(self._actor_update_opt, feed_dict={
-          self._critic_network.inputs[1]:actions,
-          self._actor_network.inputs[0]:state_arr,
-          self._critic_network.inputs[0]:state_arr,
-        })
 
-        #update target network
+        #generate feed_dict on the fly based on the states
+        feed_dict = {}
+        actor_layer_names = curr_states.keys()
+        for i,name in enumerate(actor_layer_names):
+          feed_dict[self._actor_network.inputs[i]] = curr_states[name].copy()
+          feed_dict[self._critic_network.inputs[i]] = curr_states[name].copy()
+        #the last one is the critic input
+        feed_dict[self._critic_network.inputs[len(actor_layer_names)]] = actions
+        #run the TF operation to update it
+        self._sess.run(self._actor_update_opt, feed_dict=feed_dict)
+
+
+        # ------------ update target network ----------------------------------#
         self._target_actor_network = get_soft_target_model_updates(self._target_actor_network, self._actor_network, self._update_tau)
         self._target_critic_network = get_soft_target_model_updates(self._target_critic_network, self._critic_network, self._update_tau)
 
-        #K.set_learning_phase(0) #set learning phase
-
+        #return the training loss of the critic network
         return training_loss
 
     def create_target_networks(self):
@@ -353,54 +300,42 @@ class DDPGAgent(object):
           curr_action = 0
           curr_reward = 0
 
-          processed_curr_state = self._preprocessors.process_state_for_memory(curr_state)
+          #process the curernt state for both the network and the memory
+          processed_curr_state = self._preprocessors.process_state_for_network(curr_state)
+          processed_curr_state_mem = self._preprocessors.process_state_for_memory(curr_state)
 
           #Loop until the end of the episode or hit the maximum number of episodes
           while(not is_terminal or (max_episode_length != None and step_num >= max_episode_length)):
 
-
-            #use the policy to select the action based on the state
-            #TODO batch this for action
-            #processed_curr_state_none_action =
-            #print(processed_curr_state) 
+            #use the actor network select an action
             curr_action = self.select_action(processed_curr_state)
-            #print(curr_action)
             #add noise to the action
             curr_action = self.noise_update(curr_action,total_step_num)
-            curr_reward = 0
             #apply the action and save the reward
-            next_state, reward, is_terminal, debug_info = env.step(curr_action)
-            env.render()
-            #print(curr_action)
-            curr_reward = self._preprocessors.process_reward(reward)
-            # #depend on how many frames we skip
-            # for i in range(0, self._skip_frame):
-            #   last_frame = curr_frame
-            #   curr_frame, reward, is_terminal, debug_info = env.step(curr_action)
-            #   curr_reward += reward
-            #   if(is_terminal):
-            #     break
 
-            processed_next_state = self._preprocessors.process_state_for_memory(next_state)        
+            #clip the action
+            curr_action = np.clip(curr_action,env.action_space.low,env.action_space.high)
+
+            next_state, reward, is_terminal, debug_info = env.step(curr_action)
+            #env.render()
+            #get the current reward
+            curr_reward = self._preprocessors.process_reward(reward)
+            #process the next frame for both the network and memory
+            processed_next_state = self._preprocessors.process_state_for_network(next_state)        
+            processed_next_state_mem = self._preprocessors.process_state_for_memory(next_state)        
 
             #insert into memory
-            self._replay_memory.insert(processed_curr_state, processed_next_state, curr_action, curr_reward, is_terminal)
+            self._replay_memory.insert(processed_curr_state_mem, processed_next_state_mem, curr_action, curr_reward, is_terminal)
 
-
-            #update the policy
+            #update the networks
             training_loss = self.update_step(total_step_num)
             cumulative_loss += training_loss
 
             #check if we should run an evaluation step and save the rewards
             if(total_step_num != 0 and total_step_num % self._eval_freq == 0):
               print("\nstart performance evaluation for step:{:09d}".format(total_step_num))
-              #change policy to use the evaluation policy
-              #curr_policy = self._policy
-              #self._policy = eval_policy
               #evaluate
               avg_reward, avg_length = self.evaluate(env, self._eval_times, verbose=True, render=False)
-              #set back the policy
-              #self._policy = curr_policy
               #save the performance
               self._performance_recorder.append((total_step_num, avg_reward, avg_length))            
 
@@ -413,8 +348,9 @@ class DDPGAgent(object):
             step_num += 1
             total_step_num += 1
             cumulative_reward += curr_reward
+            #update both rewards and state
             processed_curr_state = processed_next_state
-
+            processed_curr_state_mem = processed_next_state_mem
 
           #for tracking purposes
           sys.stdout.write("\r{:09d} ep:{:04d}, len:{:04d}, reward:{:.4f}, loss:{:.5f}, time_per_step:{:.5f}".format(total_step_num, num_i, step_num, cumulative_reward, cumulative_loss/step_num, (time.time() - start_time)/step_num))
@@ -472,6 +408,9 @@ class DDPGAgent(object):
             processed_curr_state = self._preprocessors_eval.process_state_for_network(curr_state)
             #select action based on the most recent image
             curr_action = self.select_action(processed_curr_state)
+            #clip the action
+            curr_action = np.clip(curr_action,env.action_space.low,env.action_space.high)
+
             if(render):
               env.render()
             curr_episode_step += 1

@@ -7,7 +7,7 @@ from keras.models import model_from_json
 from keras.optimizers import Adam
 from keras.engine.topology import Layer as BLayer
 
-from deep.preprocessors import PreprocessorSequence, HistoryPreprocessor, PendulumPreprocessor
+from deep.preprocessors import PreprocessorSequence, HistoryPreprocessor, PendulumPreprocessor, KerasPreprocessor
 from deep.ddpg import DDPGAgent
 
 

@@ -29,6 +29,8 @@ class BaxterActionSpace(gym.Space):
     def __init__(self):
         self._max_vel = np.array([0.3,0.3,0.3,0.3,0.3,0.3,0.3])
         self._min_vel = np.array([-0.3,-0.3,-0.3,-0.3,-0.3,-0.3,-0.3])
+        self.high = self._max_vel
+        self.low = self._min_vel
 
     def sample(self):
         """
@@ -40,6 +42,8 @@ class BaxterActionSpace(gym.Space):
 
         #check if the stuff is in range
         return (x < self._max_vel).all() and (x > self._min_vel).all()
+
+
 
 
 class BaxterEnv(gym.Env):

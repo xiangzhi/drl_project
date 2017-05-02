@@ -157,7 +157,7 @@ class PendulumPreprocessor(Preprocessor):
         for i in range(0, hist_len):
             arr[:,i] = state[i]
 
-        return arr
+        return (arr,)
 
     def clone(self):
         return PendulumPreprocessor()
@@ -196,6 +196,47 @@ class NumpyPreprocessor(Preprocessor):
 
     def clone(self):
         return NumpyPreprocessor()
+
+class KerasPreprocessor(Preprocessor):
+    """
+    Convert the states into correct keras states for processing
+    """
+    def __init__(self,input_name_list):
+        """
+        input_name_list is the ordered list of names
+        """
+        self._name_list = input_name_list
+
+    def process_state_for_network(self, state):
+        return self._inner_process(state)
+
+    def process_state_for_memory(self, state):
+        return state
+        #return self._inner_process(state)
+
+    def _inner_process(self, state):
+        """
+        incoming state should be a tuple
+        """
+
+        if len(state) != len(self._name_list):
+            print("state and name list different length")
+
+        obj_dict = {}
+        for i,name in enumerate(self._name_list):
+            obj_dict[name] = np.array([state[i]]) #we also convert it to numpy array
+        return obj_dict
+
+    def process_batch(self, samples):
+        obj_dict = {}
+        for i,name in enumerate(self._name_list):
+            arr_list = [_[i] for _ in samples]
+            obj_dict[name] = np.array(arr_list)
+        return obj_dict
+
+
+    def clone(self):
+        return KerasPreprocessor(self._name_list)
 
 class PreprocessorSequence(Preprocessor):
     """You may find it useful to stack multiple prepcrocesosrs (such as the History and the AtariPreprocessor).
