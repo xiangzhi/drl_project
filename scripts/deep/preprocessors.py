@@ -146,7 +146,7 @@ class PendulumPreprocessor(Preprocessor):
         return self.converter(state, np.float32)
 
     def process_state_for_memory(self, state):
-        return self.converter(state, np.uint8)
+        return self.converter(state, np.float32)
 
 
     def converter(self, state, dtype):

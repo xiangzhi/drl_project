@@ -4,12 +4,15 @@ import copy
 import json
 import sys
 
+from keras import optimizers
+
+
 from .utils import get_hard_target_model_updates, clone_keras_model, get_soft_target_model_updates
 from .policy import GreedyEpsilonPolicy
 
 import tensorflow as tf
 import keras.backend as K
-
+import keras
 
 """Main Deep  agent."""
 
@@ -64,7 +67,8 @@ class DDPGAgent(object):
         print("start TF compile")
         with tf.name_scope("update_scope"):
           #create an optimizer
-          opt = tf.train.AdamOptimizer()
+          opt = tf.train.AdamOptimizer(learning_rate=0.01)
+          #opt = optimizers.Adam(lr=0.01)
           #compute the gradients of the ac
           self._action_tf = tf.placeholder(tf.float32, shape=(None,1))
           #action_weights_tf = tf.placeholder()
@@ -144,6 +148,7 @@ class DDPGAgent(object):
         #   'joint_input':joint_input
         #   }, batch_size=1)
         #actions = self._actor_network.predict([[joint_angles],[image_input]],batch_size=1)
+        K.set_learning_phase(0)
         actions = self._actor_network.predict({'actor_pendulum_input':np.array([state])}, batch_size=1)
 
         return actions[0].tolist()
@@ -172,7 +177,7 @@ class DDPGAgent(object):
         # #set to the critic network
         # return q_values
 
-
+        K.set_learning_phase(0)
         q_values = self._target_critic_network.predict({
           'critic_pendulum_input':np.array(states),
           'action_input':action_arr
@@ -198,6 +203,7 @@ class DDPGAgent(object):
         #   'joint_input':joint_input
         #   }, batch_size=self._batch_size)
 
+        K.set_learning_phase(0)
         actions = self._target_actor_network.predict({'actor_pendulum_input':np.array(states)}, batch_size=self._batch_size)
 
         #set to the critic network
@@ -214,11 +220,11 @@ class DDPGAgent(object):
         #calculate the weiner number
         wiener = np.random.randn(np.size(action)) #we can do this because Wiener process has a gaussian increment
 
-        Noise = thetas * (action - means) + sigma * wiener
+        Noise = thetas * (means - action) + sigma * wiener
 
-        return action + np.array([(1 / (1 + time_step))])
+        #return action + np.array([(1. / (1. + time_step))])
 
-        #return action + Noise 
+        return action + Noise 
 
 
     def update_step(self, total_step_num):
@@ -226,25 +232,28 @@ class DDPGAgent(object):
         Update the neural network by sampling from replay memory
         """
 
+        #K.set_learning_phase(1) #set learning phase
         #first sample from memory
-        curr_state_arr, next_state_arr, reward_arr, action_arr, terminal_arr  = self._replay_memory.sample(self._batch_size)
+        curr_state_arr, next_state_arr, action_list, reward_list, terminal_list  = self._replay_memory.sample(self._batch_size)
         #process all the inputs to make sure they are in the right format
         curr_state_arr = self._preprocessors.process_batch(curr_state_arr)
         next_state_arr = self._preprocessors.process_batch(next_state_arr)        
-
+        action_arr = np.array(action_list)
         #calculate the q value using the target critic network
         #first get the base q_values from the target critic network
         # curr_q_values = self.cal_q_values(curr_state_arr, action_arr)
         # target_q_values = copy.deepcopy(curr_q_values)
 
+        #print(curr_state_arr)
+
         targeted_actions = self.select_actions(next_state_arr)
         targeted_q_value = self.cal_q_values(next_state_arr,targeted_actions) #batch, size of actions
         y_values = np.zeros(np.shape(targeted_q_value))
 
-        for i in range(0, np.size(reward_arr,0)):
-          y_values += reward_arr[i] #add to all actions's y value
-          if(not terminal_arr[i]):
-            y_values += self._gamma * targeted_q_value[i] #if not terminal, add the q_values for next state
+        for i in range(len(reward_list)):
+          y_values[i] = reward_list[i] #add to all actions's y value
+          if(not terminal_list[i]):
+            y_values[i] += self._gamma * targeted_q_value[i] #if not terminal, add the q_values for next state
 
 
         #first train the critic
@@ -263,6 +272,8 @@ class DDPGAgent(object):
         #   'joint_input':joint_input_x,
         #   'action_input':action_arr
         #   }, y_values)
+
+        K.set_learning_phase(1)
         state_arr = np.array(curr_state_arr)
         training_loss = self._critic_network.train_on_batch({'critic_pendulum_input':state_arr,
           'action_input':action_arr
@@ -270,6 +281,7 @@ class DDPGAgent(object):
 
         #update the actor network using sampled policy gradient
         #the action is predicted
+        K.set_learning_phase(0)
         actions = self._actor_network.predict({'actor_pendulum_input':state_arr},batch_size=self._batch_size)
         #update the actor network
         # self._sess.run(self._actor_update_opt, feed_dict={
@@ -277,17 +289,21 @@ class DDPGAgent(object):
         #     self._actor_network.inputs[0]:image_input_x,
         #     self._actor_network.inputs[1]:joint_input_x
         # })
+        K.set_learning_phase(1)
         self._sess.run(self._actor_update_opt, feed_dict={
           self._critic_network.inputs[1]:actions,
           self._actor_network.inputs[0]:state_arr,
-          self._critic_network.inputs[0]:state_arr
+          self._critic_network.inputs[0]:state_arr,
         })
-   
+
         #check whether we want to update the target network
         if(total_step_num % self._target_update_freq == 0):
           self._target_actor_network = get_soft_target_model_updates(self._target_actor_network, self._actor_network, self._update_tau)
           self._target_critic_network = get_soft_target_model_updates(self._target_critic_network, self._critic_network, self._update_tau)
-          print("\nfinish updating target networks")
+          #print("\nfinish updating target networks")
+
+        #K.set_learning_phase(0) #set learning phase
+
         return training_loss
 
     def create_target_networks(self):
@@ -351,11 +367,12 @@ class DDPGAgent(object):
 
             #use the policy to select the action based on the state
             #TODO batch this for action
+            #processed_curr_state_none_action =
+            #print(processed_curr_state) 
             curr_action = self.select_action(processed_curr_state)
-            print(curr_action)
+            #print(curr_action)
             #add noise to the action
             curr_action = self.noise_update(curr_action,total_step_num)
-
             curr_reward = 0
             #apply the action and save the reward
             next_state, reward, is_terminal, debug_info = env.step(curr_action)

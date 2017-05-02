@@ -62,8 +62,8 @@ class PreprocessorsTestMethods(unittest.TestCase):
             output_state = self.preprocessors.process_state_for_network(input_state)
             jnt_angles = output_state[0]
             img_input = output_state[1]
-            print(output_state[0])
-            print(output_state[1])
+            #print(output_state[0])
+            #print(output_state[1])
             self.assertTrue(np.shape(img_input[:,:,:]) == (80,80,3))
             self.assertTrue(np.all(jnt_angles[:,0] == joint_angle))
 

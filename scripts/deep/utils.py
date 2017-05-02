@@ -120,10 +120,8 @@ def memory_burn_in(env, memory, preprocessors, burn_in_size):
         next_state, reward, is_terminal, debug_info = env.step(action)
         processed_next_state = preprocessors.process_state_for_memory(next_state)
         #append the current state to memory
-        memory.append(processed_curr_state, action, preprocessors.process_reward(reward))
+        memory.insert(processed_curr_state,processed_next_state,action, preprocessors.process_reward(reward), is_terminal)
         if(is_terminal):
-            processed_end_state = processed_next_state
-            memory.end_episode(processed_end_state,True)
             curr_state = env.reset()
             processed_next_state = preprocessors.process_state_for_memory(curr_state)
             
