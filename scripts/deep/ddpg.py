@@ -408,7 +408,7 @@ class DDPGAgent(object):
             curr_action = self.select_action(processed_curr_state)
             #clip the action
             curr_action = np.clip(curr_action,env.action_space.low,env.action_space.high)
-            print(curr_action)
+            #print(curr_action)
             #curr_action = np.array([0])
             if(render):
               env.render()
