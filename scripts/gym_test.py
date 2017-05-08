@@ -28,75 +28,103 @@ from keras import backend as K
 from keras.layers.normalization import BatchNormalization
 
 
-def create_actor_model(hist_window,state_size,action_dim,scale,model_name):
+# def create_actor_model(hist_window,state_size,action_dim,scale,model_name):
 
-    #the current pendulum state
+#     #the current pendulum state
+#     pendulum_input = Input(shape=(state_size,hist_window), name='pendulum_input')
+#     merged_layer = Flatten()(pendulum_input)
+#     #merged_layer = BatchNormalization()(merged_layer)
+#     #bunch of dense layers
+#     fan_limit = 1./np.sqrt(state_size * hist_window)
+#     #merged_layer = Dense(400, kernel_initializer=RandomUniform(minval=-fan_limit, maxval=fan_limit))(merged_layer)
+#     merged_layer = Dense(400)(merged_layer)
+#     merged_layer = Activation('relu')(merged_layer)
+#     #merged_layer = BatchNormalization()(merged_layer)
+
+#     fan_limit = 1./np.sqrt(400)
+#     #merged_layer = Dense(300, kernel_initializer=RandomUniform(minval=-fan_limit, maxval=fan_limit))(merged_layer)
+#     merged_layer = Dense(300)(merged_layer)
+#     merged_layer = Activation('relu')(merged_layer)
+#     #merged_layer = BatchNormalization()(merged_layer)
+
+#     #output layer
+#     uniform_initializer = RandomUniform(minval=-3e-3, maxval=3e-3)
+#     output_layer = Dense(action_dim, activation='tanh', kernel_initializer=uniform_initializer)(merged_layer)
+
+
+#     scaled_out_put_layer = Lambda(lambda x:x*2)(output_layer)
+#     model = Model(inputs=pendulum_input, outputs=scaled_out_put_layer, name=model_name)
+
+#     return model
+
+def create_actor_model(hist_window,state_size,action_dim,scale,model_name):
     pendulum_input = Input(shape=(state_size,hist_window), name='pendulum_input')
     merged_layer = Flatten()(pendulum_input)
-    #merged_layer = BatchNormalization()(merged_layer)
-    #bunch of dense layers
-    fan_limit = 1./np.sqrt(state_size * hist_window)
-    #merged_layer = Dense(400, kernel_initializer=RandomUniform(minval=-fan_limit, maxval=fan_limit))(merged_layer)
-    merged_layer = Dense(400)(merged_layer)
-    merged_layer = Activation('relu')(merged_layer)
-    #merged_layer = BatchNormalization()(merged_layer)
+    merged_layer = Dense(16, activation='relu')(merged_layer)
+    merged_layer = Dense(16, activation='relu')(merged_layer)
+    merged_layer = Dense(16, activation='relu')(merged_layer)
+    output_layer = Dense(action_dim, activation='tanh')(merged_layer)
+    scaled_output_layer = Lambda(lambda x:x*1)(output_layer)
 
-    fan_limit = 1./np.sqrt(400)
-    #merged_layer = Dense(300, kernel_initializer=RandomUniform(minval=-fan_limit, maxval=fan_limit))(merged_layer)
-    merged_layer = Dense(300)(merged_layer)
-    merged_layer = Activation('relu')(merged_layer)
-    #merged_layer = BatchNormalization()(merged_layer)
+    return Model(inputs=pendulum_input, outputs=scaled_output_layer, name=model_name)
 
-    #output layer
-    uniform_initializer = RandomUniform(minval=-3e-3, maxval=3e-3)
-    output_layer = Dense(action_dim, activation='tanh', kernel_initializer=uniform_initializer)(merged_layer)
+# def create_critic_model(hist_window,state_size,action_dim,model_name):
+
+#    #the current pendulum state
+#     pendulum_input = Input(shape=(state_size,hist_window), name='pendulum_input')
+#     merged_layer = Flatten()(pendulum_input)
+#     #merged_layer = BatchNormalization()(merged_layer)
+#     #bunch of dense layers
+#     fan_limit = 1./np.sqrt(state_size * hist_window)
+#     #merged_layer = Dense(400, kernel_initializer=RandomUniform(minval=-fan_limit, maxval=fan_limit))(merged_layer)
+#     merged_layer = Dense(400)(merged_layer)
+#     merged_layer = Activation('relu')(merged_layer)
+#     #merged_layer = BatchNormalization()(merged_layer)
 
 
-    scaled_out_put_layer = Lambda(lambda x:x*1)(output_layer)
-    model = Model(inputs=pendulum_input, outputs=scaled_out_put_layer, name=model_name)
+#     #merged_layer = Dense(300,activation='relu')(merged_layer)
+#     #merge with the action
+#     #the actual output inputs
+#     action_input = Input(shape=(action_dim,),name='action_input')
+#     #action_layer = BatchNormalization()(action_input)
 
-    return model
+#     #action_layer = Dense(300,activation='relu')(action_input)
+#     #action_layer = Flatten()(action_input)
+#     #merge all layers
+#     #merged_layer = keras.layers.concatenate([merged_layer, action_layer])
+#     merged_layer = keras.layers.concatenate([merged_layer, action_input])
+#     fan_limit = 1./np.sqrt(400+action_dim)
+#     #merged_layer = Dense(600, kernel_initializer=RandomUniform(minval=-fan_limit, maxval=fan_limit))(merged_layer)
+#     merged_layer = Dense(600)(merged_layer)
+#     merged_layer = Activation('relu')(merged_layer)
+#     #merged_layer = BatchNormalization()(merged_layer)
+
+#     #output layer
+#     uniform_initializer = RandomUniform(minval=-3e-3, maxval=3e-3)
+#     output_layer = Dense(action_dim, activation='linear', kernel_initializer=uniform_initializer)(merged_layer)
+
+    
+#     model = Model(inputs=[pendulum_input,action_input], outputs=output_layer, name=model_name)
+
+#     return model
 
 def create_critic_model(hist_window,state_size,action_dim,model_name):
 
    #the current pendulum state
     pendulum_input = Input(shape=(state_size,hist_window), name='pendulum_input')
     merged_layer = Flatten()(pendulum_input)
-    #merged_layer = BatchNormalization()(merged_layer)
-    #bunch of dense layers
-    fan_limit = 1./np.sqrt(state_size * hist_window)
-    #merged_layer = Dense(400, kernel_initializer=RandomUniform(minval=-fan_limit, maxval=fan_limit))(merged_layer)
-    merged_layer = Dense(400)(merged_layer)
-    merged_layer = Activation('relu')(merged_layer)
+    merged_layer = Dense(32, activation='relu')(merged_layer)
     #merged_layer = BatchNormalization()(merged_layer)
 
-
-    #merged_layer = Dense(300,activation='relu')(merged_layer)
-    #merge with the action
-    #the actual output inputs
     action_input = Input(shape=(action_dim,),name='action_input')
-    #action_layer = BatchNormalization()(action_input)
 
-    #action_layer = Dense(300,activation='relu')(action_input)
-    #action_layer = Flatten()(action_input)
-    #merge all layers
-    #merged_layer = keras.layers.concatenate([merged_layer, action_layer])
     merged_layer = keras.layers.concatenate([merged_layer, action_input])
-    fan_limit = 1./np.sqrt(400+action_dim)
-    #merged_layer = Dense(600, kernel_initializer=RandomUniform(minval=-fan_limit, maxval=fan_limit))(merged_layer)
-    merged_layer = Dense(600)(merged_layer)
-    merged_layer = Activation('relu')(merged_layer)
-    #merged_layer = BatchNormalization()(merged_layer)
 
-    #output layer
-    uniform_initializer = RandomUniform(minval=-3e-3, maxval=3e-3)
-    output_layer = Dense(action_dim, activation='linear', kernel_initializer=uniform_initializer)(merged_layer)
+    merged_layer = Dense(32, activation='relu')(merged_layer)
+    merged_layer = Dense(32, activation='relu')(merged_layer)
+    output_layer = Dense(action_dim, activation='linear')(merged_layer)
 
-    
-    model = Model(inputs=[pendulum_input,action_input], outputs=output_layer, name=model_name)
-
-    return model
-
+    return Model(inputs=[pendulum_input,action_input], outputs=output_layer, name=model_name)
 
 def main():
 
@@ -115,7 +143,7 @@ def main():
     #initialize tensorflow
     sess = tf.Session()
     K.set_session(sess)
-    K.set_learning_phase(1)
+    #K.set_learning_phase(1)
 
     state_size = env.observation_space.shape[0]
     batch_size = 64

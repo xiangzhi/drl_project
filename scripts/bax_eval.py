@@ -22,13 +22,7 @@ import matplotlib.pyplot as plt
 import tensorflow as tf
 from keras import backend as K
 
-from gym.envs.registration import registry, register, make, spec
-
-register(
-    id='BaxterEnv-v0',
-    entry_point='baxter_env:BaxterEnv',
-    max_episode_steps=50,
-)
+import bax_env_register
 
 def main():
 

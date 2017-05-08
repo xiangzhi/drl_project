@@ -39,7 +39,7 @@ class DDPGAgent(object):
       self._gamma = gamma
       self._batch_size = batch_size
 
-      self._eval_times = 20 #how many episodes we run to evaluate the network
+      self._eval_times = 10 #how many episodes we run to evaluate the network
       self._eval_freq = 2000 #how many steps before we do evaluation
       self._action_dim = 7  
       self._checkin_freq = 10000
@@ -146,8 +146,6 @@ class DDPGAgent(object):
         """
         Calculate the q values of each state and action using the critic network 
         """
-        #set the backend to test phase
-        K.set_learning_phase(0)
         #make sure the states is a new instance
         states = copy.deepcopy(states)
         #append the action inputs
@@ -160,8 +158,6 @@ class DDPGAgent(object):
         """
         Calculate the q values of each state and action using the critic network 
         """
-
-        K.set_learning_phase(0)
         actions = self._target_actor_network.predict(states, batch_size=self._batch_size)
         return actions
 
@@ -206,9 +202,6 @@ class DDPGAgent(object):
           if(not terminal_list[i]):
             y_values[i] += self._gamma * targeted_q_value[i] #if not terminal, add the q_values for next state
 
-
-        #set backend to learning phase
-        K.set_learning_phase(1)
         #make sure critic object is new and append action inputs
         critic_obj = copy.deepcopy(curr_states)
         #add action inputs
@@ -217,12 +210,8 @@ class DDPGAgent(object):
         training_loss = self._critic_network.train_on_batch(critic_obj, y_values)
 
         # ------------- update actor network -----------------------------------#
-        #set it back to test phase to get actions based on actor
-        K.set_learning_phase(0)
         #get action at current state
         actions = self._actor_network.predict(curr_states,batch_size=self._batch_size)
-        #set back to learning
-        K.set_learning_phase(1)
 
         #generate feed_dict on the fly based on the states
         feed_dict = {}
@@ -230,6 +219,11 @@ class DDPGAgent(object):
         for i,name in enumerate(actor_layer_names):
           feed_dict[self._actor_network.inputs[i]] = curr_states[name].copy()
           feed_dict[self._critic_network.inputs[i]] = curr_states[name].copy()
+        #set to learning phase
+
+        #should be 1 if we are also using it in the actor, but right now, its only in the critic
+        feed_dict[tf.contrib.keras.backend.learning_phase()] = 1 # 1 = training phase, 0 = test phase
+
         #the last one is the critic input
         feed_dict[self._critic_network.inputs[len(actor_layer_names)]] = actions
         #run the TF operation to update it
