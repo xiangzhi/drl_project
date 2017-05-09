@@ -31,9 +31,13 @@ class BaxterActionSpace(gym.Space):
     def __init__(self, joint_list):
         self._max_vel = np.array([0.3,0.3,0.3,0.3,0.3,0.3,0.3])
         self._min_vel = np.array([-0.3,-0.3,-0.3,-0.3,-0.3,-0.3,-0.3])
-        self.high = self._max_vel
-        self.low = self._min_vel
+
         self._active_joint_list = joint_list
+
+        #get the list by active joints only
+        self.high = self._max_vel[self._active_joint_list]
+        self.low = self._min_vel[self._active_joint_list]
+
         self._num_joint = 7
         self.shape = (np.sum(joint_list),)
     def sample(self):
@@ -47,10 +51,6 @@ class BaxterActionSpace(gym.Space):
         #return the joints according to the active joint list
         return  gen_velocities[self._active_joint_list] 
 
-    def clip_values(self, values):
-        curr_action = np.clip(values,self.low[self._active_joint_list],self.high[self._active_joint_list])
-        return actions
-
     def contains(self, x):
 
         #check if the stuff is in range
@@ -60,8 +60,17 @@ class BaxterActionSpace(gym.Space):
 
         return (x_full < self._max_vel).all() and (x_full > self._min_vel).all()
 
+class BaxterObservationSpace(gym.Space):
 
+    def __init__(self, active_joint_list ,joint_only=False):
 
+        self._joint_only = joint_only
+        #num_joint_in_play = np.sum(active_joint_list)
+        num_joint_in_play = 7
+        if(self._joint_only):
+            self.shape = (num_joint_in_play,)
+        else:
+            self.shape = (num_joint_in_play,(800,800,3))
 
 class BaxterEnv(gym.Env):
 
@@ -72,7 +81,7 @@ class BaxterEnv(gym.Env):
         #imsave('out.jpg',self._last_image)
 
 
-    def __init__(self, start_joint_list=None, ball_loc=None, active_joint_list=None,random_start=False):
+    def __init__(self, start_joint_list=None, ball_loc=None, active_joint_list=None,random_start=False, joint_only=False, neg_reward=-1):
 
         rospy.init_node('baxter_env_v0',anonymous=True)
 
@@ -113,25 +122,31 @@ class BaxterEnv(gym.Env):
             self._active_joint_list = np.array([True,True,True,True,True,True,True])
 
         self.action_space = BaxterActionSpace(self._active_joint_list)
+        self.observation_space = BaxterObservationSpace(self._active_joint_list, joint_only)
 
+        self._joint_only = joint_only
         self.viewer = None
 
         self._num_joint = 7
         self._error_collector = np.zeros(7)
-        self._neg_reward = -0.1
-
+        self._neg_reward = neg_reward
 
         self._total_reset()
         self._joint_angles = self._convert_joint_angle(self._left_arm.joint_angles())
         self._reset()
         
 
-    def _calculate_reward(self, state):
+    def _calculate_reward(self, img, joint_angles):
         """
         calculate reward, right now is just how much green pixels we see in the image
         """
         threshold = 200
-        val = np.sum(state[:,:,1] > threshold)
+        val = np.sum(img[:,:,1] > threshold)
+
+        #scale the positive reward to between 0 < x <= 1
+        val = val/(600.0 * 600)
+        val = 1 if (val >= 1) else val
+
         return self._neg_reward if(val == 0) else val 
 
     def _convert_joint_angle(self, dict_angle):
@@ -177,14 +192,20 @@ class BaxterEnv(gym.Env):
         #the state will be the current join angles
         self._joint_angles = self._convert_joint_angle(self._left_arm.joint_angles())
         image = self._last_image
-        reward = self._calculate_reward(image)
+        reward = self._calculate_reward(image,self._joint_angles)
         #pause the simulation
         rospy.wait_for_service('/gazebo/pause_physics')
         self._pause_gazebo()
 
 
+        if(self._joint_only):
+            curr_state = self._joint_angles
+        else:
+            curr_state = (self._joint_angles, image)
+
+
         #return the current state, reward and bool and something
-        return (self._joint_angles, image), reward, False, {"info":"something"}
+        return curr_state, reward, False, {"info":"something"}
 
 
     def _total_reset(self):
@@ -268,8 +289,13 @@ class BaxterEnv(gym.Env):
         #step counter
         self._episode_steps = 0;
 
+        if(self._joint_only):
+            curr_state = joint_positions
+        else:
+            curr_state = (joint_positions, self._last_image)
+
         #return the newest image as state
-        return (joint_positions, self._last_image) 
+        return curr_state
 
 
     def _render(self, mode='human', close=False):
@@ -294,3 +320,25 @@ class BaxterEnv(gym.Env):
         #seeding function
         pass
 
+
+
+class BaxterEnvGravity(BaxterEnv):
+    """
+    This environment is different in that
+    The reward function focusing on maintaining the start_joint_list
+    """
+
+    def _calculate_reward(self, img, joint_angles):
+        """
+        The error is the total difference from the start joint
+        """
+
+        #get the error for each joints
+        err = np.abs(self._start_joint_list[self._active_joint_list] - joint_angles[self._active_joint_list])
+        #combined the joints
+        err = np.sum(err)
+        return -err
+
+
+    def __init__(self, start_joint_list, *args, **kwargs):
+        super(BaxterEnvGravity, self).__init__(start_joint_list, *args, **kwargs)

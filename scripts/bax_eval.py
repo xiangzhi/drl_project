@@ -59,22 +59,24 @@ def main():
     # actor_model.compile('adam','mse')
     # critic_model.compile('adam','mse')
 
-    print(actor_weight_name)
-
     input_shape = (80,80)
-    batch_size = 32
-    action_dim = 7
-    history_size = 4
+    history_size = 1
     eval_size = 100
+    joint_only = True
 
     history_prep = HistoryPreprocessor(history_size)
     baxter_prep = BaxterPreprocessor(input_shape)
     numpy_prep = NumpyPreprocessor()
-    keras_prep = KerasPreprocessor(["joint_input","image_input"])
-    preprocessors = PreprocessorSequence([baxter_prep, history_prep,numpy_prep,keras_prep]) #from left to right
+    if(not joint_only):
+        keras_prep = KerasPreprocessor(["joint_input","image_input"])
+        preprocessors = PreprocessorSequence([baxter_prep, history_prep,numpy_prep,keras_prep]) #from left to right
+    else:
+        pendulum_prep  = PendulumPreprocessor()
+        keras_prep = KerasPreprocessor(['joint_input'])
+        preprocessors = PreprocessorSequence([history_prep,pendulum_prep,keras_prep]) #from left to right
 
     agent = DDPGAgent(sess,actor_model, critic_model, preprocessors, None, None, None,"eval_run")
-    reward_arr, length_arr = agent.evaluate_detailed(env,eval_size,render=False, verbose=True)
+    reward_arr, length_arr = agent.evaluate_detailed(env,eval_size,render=True, verbose=True)
     print("\nRan {} Episodes, reward:M={}, SD={} length:M={}, SD={}".format(eval_size, np.mean(reward_arr),np.std(reward_arr),np.mean(length_arr), np.std(reward_arr)))
     print("max:{} min:{}".format(np.max(reward_arr), np.min(reward_arr)))
 

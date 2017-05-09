@@ -61,39 +61,20 @@ class DDPGAgent(object):
         critic_weights = self._critic_network.trainable_weights
         print("start TF compile")
         with tf.name_scope("update_scope"):
-          #create an optimizer
+          #create an optimizer for the actor 
           opt = tf.train.AdamOptimizer(learning_rate=actor_learning_rate)
-          #opt = optimizers.Adam(lr=0.01)
-          #compute the gradients of the ac
+          #compute the gradients of the actor
           self._action_tf = tf.placeholder(tf.float32, shape=(None,action_dim))
-          #action_weights_tf = tf.placeholder()
-
-
-          #calculate the gradient of the critic network relative to the action selected
-          #action_gradient = tf.gradients(self._critic_network.output, self._action_tf)
-
-          #TODO !!! Change this!!!!!
+          
           grad_for_action = tf.gradients(self._critic_network.outputs, self._critic_network.inputs[critic_input_num])[0]
-          #print(action_gradient)
-          # print(actions.shape)
-          #print(action_gradient)
-          #action_gradient = [(tf.scalar_mul(-1,grad[0]),grad[1]) for grad in action_gradient]
-          #action_gradient = tf.scalar_mul(-1, action_gradient)
-
-          #calculate the gradient of the actor network according to the critic weight 
-          #action_gradient_tensor = tf.convert_to_tensor(action_gradient, dtype=tf.float32)
           param_gradient = tf.gradients(self._actor_network.outputs, self._actor_network.trainable_weights, -grad_for_action)
-        # #print(param_gradient)
-        # #print(actor_weights)
-
-
-
+          #apply the gradient
           self._actor_update_opt = opt.apply_gradients(zip(param_gradient, self._actor_network.trainable_weights))
 
         print("finish TF compile")
         self._sess.run(tf.global_variables_initializer())
 
-        # #model trainign callbacks
+        # Log the models to Tensorboard for debugging
         # self._log_dir = "{}-graph".format(self._run_name)
         # self._actor_ = keras.callbacks.TensorBoard(log_dir=self._log_dir, histogram_freq=0, write_graph=True, write_images=True)
 
@@ -221,7 +202,7 @@ class DDPGAgent(object):
         #set to learning phase
 
         #should be 1 if we are also using it in the actor, but right now, its only in the critic
-        #feed_dict[tf.contrib.keras.backend.learning_phase()] = 1 # 1 = training phase, 0 = test phase
+        feed_dict[K.learning_phase()] = 1 # 1 = training phase, 0 = test phase
 
         #the last one is the critic input
         feed_dict[self._critic_network.inputs[len(actor_layer_names)]] = actions
@@ -265,10 +246,7 @@ class DDPGAgent(object):
         self.save_models()
         self.save_check_point(0)
 
-        #copy the current network to the target_network
-        #self._target_network = clone_keras_model(self._network, self._keras_custom_layers)
-        #eval_policy = GreedyEpsilonPolicy(0.01)
-        #self._action_size = env.action_space.n
+        #Initialize values
         start_fitting_time = time.time()
         total_step_num = 0;
         
@@ -282,7 +260,6 @@ class DDPGAgent(object):
           cumulative_reward = 0
           cumulative_loss = 0
           step_num = 0 #Step number for current episode
-
           start_time = time.time()
 
           #for storing over states
@@ -303,9 +280,9 @@ class DDPGAgent(object):
             #apply the action and save the reward
 
             #clip the action
-            #curr_action = np.clip(curr_action,env.action_space.low,env.action_space.high)
+            curr_action_clipped = np.clip(curr_action,env.action_space.low,env.action_space.high)
 
-            next_state, reward, is_terminal, debug_info = env.step(curr_action)
+            next_state, reward, is_terminal, debug_info = env.step(curr_action_clipped)
             #env.render()
             #get the current reward
             curr_reward = self._preprocessors.process_reward(reward)
@@ -316,7 +293,6 @@ class DDPGAgent(object):
             #insert into memory
             self._replay_memory.insert(processed_curr_state_mem, processed_next_state_mem, curr_action, curr_reward, is_terminal)
 
-
             #update the networks only if the replay memory > batch size
             if(len(self._replay_memory) > self._batch_size):
               training_loss = self.update_step(total_step_num)
@@ -326,9 +302,9 @@ class DDPGAgent(object):
             if(total_step_num != 0 and total_step_num % self._eval_freq == 0):
               print("\nstart performance evaluation for step:{:09d}".format(total_step_num))
               #evaluate
-              avg_reward, avg_length = self.evaluate(env, self._eval_times, verbose=True, render=False)
+              avg_reward, avg_length, min_reward, max_reward = self.evaluate(env, self._eval_times, verbose=True, render=False)
               #save the performance
-              self._performance_recorder.append((total_step_num, avg_reward, avg_length))            
+              self._performance_recorder.append((total_step_num, avg_reward, avg_length, min_reward, max_reward))            
 
             #check if we should to a checkpoint save
             if(total_step_num != 0 and (total_step_num%self._checkin_freq == 0)): # or (time.time() - start_fitting_time) > self._total_duration)):
@@ -367,7 +343,7 @@ class DDPGAgent(object):
         reward_arr, length_arr = self.evaluate_detailed(env,num_episodes,max_episode_length,render,verbose)
         if(verbose):
           print("\nfinish evaulate, average reward:{}".format(np.mean(reward_arr)))
-        return np.mean(reward_arr), np.mean(length_arr)
+        return np.mean(reward_arr), np.mean(length_arr), np.min(reward_arr), np.max(reward_arr)
 
     def evaluate_detailed(self, env, num_episodes,max_episode_length=None, render=False, verbose=False):
         """
@@ -400,7 +376,7 @@ class DDPGAgent(object):
             #select action based on the most recent image
             curr_action = self.select_action(processed_curr_state)
             #clip the action
-            #curr_action = np.clip(curr_action,env.action_space.low,env.action_space.high)
+            curr_action = np.clip(curr_action,env.action_space.low,env.action_space.high)
             #print(curr_action)
             #curr_action = np.array([0])
             if(render):
