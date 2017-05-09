@@ -118,6 +118,8 @@ class BaxterEnv(gym.Env):
 
         self._num_joint = 7
         self._error_collector = np.zeros(7)
+        self._neg_reward = -0.1
+
 
         self._total_reset()
         self._joint_angles = self._convert_joint_angle(self._left_arm.joint_angles())
@@ -130,7 +132,7 @@ class BaxterEnv(gym.Env):
         """
         threshold = 200
         val = np.sum(state[:,:,1] > threshold)
-        return -1 if(val == 0) else val 
+        return self._neg_reward if(val == 0) else val 
 
     def _convert_joint_angle(self, dict_angle):
         arr = np.zeros(7)
