@@ -40,8 +40,7 @@ class DDPGAgent(object):
       self._batch_size = batch_size
 
       self._eval_times = 10 #how many episodes we run to evaluate the network
-      self._eval_freq = 2000 #how many steps before we do evaluation
-      self._action_dim = 7  
+      self._eval_freq = 2000 #how many steps before we do evaluation 
       self._checkin_freq = 10000
       self._update_tau = 0.001 
       
@@ -222,7 +221,7 @@ class DDPGAgent(object):
         #set to learning phase
 
         #should be 1 if we are also using it in the actor, but right now, its only in the critic
-        feed_dict[tf.contrib.keras.backend.learning_phase()] = 1 # 1 = training phase, 0 = test phase
+        #feed_dict[tf.contrib.keras.backend.learning_phase()] = 1 # 1 = training phase, 0 = test phase
 
         #the last one is the critic input
         feed_dict[self._critic_network.inputs[len(actor_layer_names)]] = actions
@@ -304,7 +303,7 @@ class DDPGAgent(object):
             #apply the action and save the reward
 
             #clip the action
-            curr_action = np.clip(curr_action,env.action_space.low,env.action_space.high)
+            #curr_action = np.clip(curr_action,env.action_space.low,env.action_space.high)
 
             next_state, reward, is_terminal, debug_info = env.step(curr_action)
             #env.render()
@@ -401,7 +400,7 @@ class DDPGAgent(object):
             #select action based on the most recent image
             curr_action = self.select_action(processed_curr_state)
             #clip the action
-            curr_action = np.clip(curr_action,env.action_space.low,env.action_space.high)
+            #curr_action = np.clip(curr_action,env.action_space.low,env.action_space.high)
             #print(curr_action)
             #curr_action = np.array([0])
             if(render):

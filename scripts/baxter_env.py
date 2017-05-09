@@ -13,6 +13,8 @@ from sensor_msgs.msg import Image
 from scipy.misc import imsave
 from geometry_msgs.msg import Pose, Twist
 
+import matplotlib.pyplot as plt
+
 _max_limit = np.array([1,0.75,3,2.6,3,2,3])
 _min_limit = np.array([-1.6,-2,-3,0,-3,-1.57,-3])
 
@@ -21,7 +23,7 @@ def generate_random_pose():
     """
     Generates a random baxter pose
     """
-    return np.random.uniform(_min_limit, _max_limit).tolist()
+    return np.random.uniform(_min_limit, _max_limit)
 
 class BaxterActionSpace(gym.Space):
 
@@ -33,6 +35,7 @@ class BaxterActionSpace(gym.Space):
         self.low = self._min_vel
         self._active_joint_list = joint_list
         self._num_joint = 7
+        self.shape = (np.sum(joint_list),)
     def sample(self):
         """
         Randomly return a sample
@@ -43,6 +46,10 @@ class BaxterActionSpace(gym.Space):
 
         #return the joints according to the active joint list
         return  gen_velocities[self._active_joint_list] 
+
+    def clip_values(self, values):
+        curr_action = np.clip(values,self.low[self._active_joint_list],self.high[self._active_joint_list])
+        return actions
 
     def contains(self, x):
 
@@ -65,9 +72,11 @@ class BaxterEnv(gym.Env):
         #imsave('out.jpg',self._last_image)
 
 
-    def __init__(self, start_joint_list=None, ball_loc=None, active_joint_list=None):
+    def __init__(self, start_joint_list=None, ball_loc=None, active_joint_list=None,random_start=False):
 
         rospy.init_node('baxter_env_v0',anonymous=True)
+
+        self.metadata = {'render.modes': ['human', 'rgb_array']}
 
         #services used by gazebo 
         self._pause_gazebo = rospy.ServiceProxy('/gazebo/pause_physics',Empty)
@@ -84,30 +93,34 @@ class BaxterEnv(gym.Env):
 
         self._ball_prop = self._get_link("ball::ball")
 
-        if(ball_loc != None):
+        if(ball_loc is not None):
             new_pose = Pose()
             new_pose.orientation.y = 0
-            new_pose.position.x = 1.25
-            new_pose.position.y = 0.4
-            new_pose.position.z = 1.1
+            new_pose.position.x = ball_loc[0]
+            new_pose.position.y = ball_loc[1]
+            new_pose.position.z = ball_loc[2]
             self._ball_pose = new_pose
         else:
             self._ball_pose = None
 
-        self._ball_pose = ball_pose 
         self._start_joint_list = start_joint_list
+        self._random_start = random_start
 
         #active_joint_list which joints are active
         
         self._active_joint_list = active_joint_list
-        if(active_joint_list == None)
-            self._active_joint_list = [True,True,True,True,True,True,True]
+        if(active_joint_list is None):
+            self._active_joint_list = np.array([True,True,True,True,True,True,True])
 
         self.action_space = BaxterActionSpace(self._active_joint_list)
 
+        self.viewer = None
+
         self._num_joint = 7
+        self._error_collector = np.zeros(7)
 
         self._total_reset()
+        self._joint_angles = self._convert_joint_angle(self._left_arm.joint_angles())
         self._reset()
         
 
@@ -119,6 +132,28 @@ class BaxterEnv(gym.Env):
         val = np.sum(state[:,:,1] > threshold)
         return -1 if(val == 0) else val 
 
+    def _convert_joint_angle(self, dict_angle):
+        arr = np.zeros(7)
+        for i,key in enumerate(self._left_joint_names):
+            arr[i] = dict_angle[key]
+        return arr
+
+
+    #pid controller
+    def _pid_controller(self, action):
+        #need to deal with freaking gravity and coriolosis forces on the robot's arm
+        #we going to address this by using a pid on other joints to make sure they stay in place
+
+        error_arr = self._start_joint_list - self._joint_angles
+        p_arr = np.array([2,1,3,1,2,1,1])
+        i_arr = np.array([0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1])
+        self._error_collector = self._error_collector + (error_arr/100)
+        cmd_arr = error_arr * p_arr + i_arr * self._error_collector
+        #cmd_arr = error_arr * p_arr# + i_arr * self._error_collector
+        action[np.logical_not(self._active_joint_list)] = cmd_arr[np.logical_not(self._active_joint_list)]
+        return action
+
+
     def _step(self, action):
         """
         The action will be a [Nx1] velocity input for the arm, where N is the number of active joints
@@ -127,7 +162,7 @@ class BaxterEnv(gym.Env):
         #first is to convert the Nx1 to 7x1
         action_full = np.zeros(self._num_joint)
         action_full[self._active_joint_list] = action #assign them to the full action
-
+        action_full = self._pid_controller(action_full)
         #unpause the simulation
         rospy.wait_for_service('/gazebo/unpause_physics')
         self._unpause_gazebo()
@@ -138,7 +173,7 @@ class BaxterEnv(gym.Env):
         #hopefully this will be enough to get one cycle
         self._time_rate.sleep()
         #the state will be the current join angles
-        joint_angles = self._left_arm.joint_angles()
+        self._joint_angles = self._convert_joint_angle(self._left_arm.joint_angles())
         image = self._last_image
         reward = self._calculate_reward(image)
         #pause the simulation
@@ -147,7 +182,7 @@ class BaxterEnv(gym.Env):
 
 
         #return the current state, reward and bool and something
-        return (joint_angles.values(), image), reward, False, {"info":"something"}
+        return (self._joint_angles, image), reward, False, {"info":"something"}
 
 
     def _total_reset(self):
@@ -161,7 +196,8 @@ class BaxterEnv(gym.Env):
         #initialize interface here. Done here as this is the only point
         #where we are 100% sure we are in an unpaused state
         self._left_arm = baxter_interface.limb.Limb('left')
-        self._left_joint_names = self._left_arm.joint_names()
+       # self._left_joint_names = self._left_arm.joint_names()
+        self._left_joint_names = ['left_s0','left_s1','left_e0','left_e1','left_w0','left_w1','left_w2']
         self._time_rate = rospy.Rate(10)
 
         #make sure it's started
@@ -192,10 +228,16 @@ class BaxterEnv(gym.Env):
         self._last_image = None
 
         #reset the model to the a random position
-        joint_positions = self._start_joint_list
+        joint_positions = self._start_joint_list.copy()
         if(joint_positions is None):
             joint_positions = generate_random_pose()
-        self._set_model("baxter","robot_description",self._left_joint_names,joint_positions)        
+        else:
+            #check if random start
+            if(self._random_start):
+                random_pose = generate_random_pose()
+                joint_positions[self._active_joint_list] = random_pose[self._active_joint_list]
+
+        self._set_model("baxter","robot_description",self._left_joint_names,joint_positions.tolist())        
 
         ball_pose = self._ball_pose
         if(ball_pose is None):
@@ -228,9 +270,19 @@ class BaxterEnv(gym.Env):
         return (joint_positions, self._last_image) 
 
 
-    def _render(self,mode,close):
-        #render the enviornment
-        pass
+    def _render(self, mode='human', close=False):
+        if close:
+            if self.viewer is not None:
+                self.viewer.close()
+                self.viewer = None
+            return
+        if mode == 'rgb_array':
+            return self._last_image
+        elif mode == 'human':
+            from gym.envs.classic_control import rendering
+            if self.viewer is None:
+                self.viewer = rendering.SimpleImageViewer()
+            self.viewer.imshow(self._last_image)
 
     def _close(self):
         #close environment
