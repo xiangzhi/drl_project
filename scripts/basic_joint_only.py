@@ -36,7 +36,7 @@ def create_actor_model(hist_window,state_size,action_dim,model_name):
     merged_layer = Dense(32, activation='relu')(merged_layer)
     merged_layer = Dense(32, activation='relu')(merged_layer)
     output_layer = Dense(action_dim, activation='tanh')(merged_layer)
-    scaled_output_layer = Lambda(lambda x:x*0.3)(output_layer)
+    scaled_output_layer = Lambda(lambda x:x*0.5)(output_layer)
 
     return Model(inputs=pendulum_input, outputs=scaled_output_layer, name=model_name)
 
@@ -102,7 +102,7 @@ def main():
     preprocessors = PreprocessorSequence([history_prep,pendulum_prep,keras_prep]) #from left to right
 
     #create noise generator
-    noise_generator = OU_Generator(np.zeros(action_dim))
+    noise_generator = OU_Generator(np.zeros(action_dim),theta=0.1, sigma=0.1)
 
     #generate the two models
     actor_model = create_actor_model(history_size,state_size,action_dim,'actor_model_{}'.format(run_name,))

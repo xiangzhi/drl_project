@@ -12,7 +12,7 @@ class OU_Generator(NoiseGenerator):
         self._means = means
         self._thetas = np.ones(means.shape) * theta
         self._sigma = np.ones(means.shape) * sigma
-
+        print(self._sigma)
 
     def generate(self, action, step):
 

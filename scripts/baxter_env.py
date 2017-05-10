@@ -29,8 +29,8 @@ class BaxterActionSpace(gym.Space):
 
 
     def __init__(self, joint_list):
-        self._max_vel = np.array([0.3,0.3,0.3,0.3,0.3,0.3,0.3])
-        self._min_vel = np.array([-0.3,-0.3,-0.3,-0.3,-0.3,-0.3,-0.3])
+        self._max_vel = np.array([0.5,0.5,0.5,0.5,0.5,0.5,0.5])
+        self._min_vel = np.array([-0.5,-0.5,-0.5,-0.5,-0.5,-0.5,-0.5])
 
         self._active_joint_list = joint_list
 
@@ -68,9 +68,9 @@ class BaxterObservationSpace(gym.Space):
         #num_joint_in_play = np.sum(active_joint_list)
         num_joint_in_play = 7
         if(self._joint_only):
-            self.shape = (num_joint_in_play,)
+            self.shape = (num_joint_in_play*2,)
         else:
-            self.shape = (num_joint_in_play,(800,800,3))
+            self.shape = (num_joint_in_play*2,(800,800,3))
 
 class BaxterEnv(gym.Env):
 
@@ -171,6 +171,13 @@ class BaxterEnv(gym.Env):
         return action
 
 
+    def _observe_robot_state(self):
+        #the state will be the combined of angles and velocities
+        self._joint_angles = self._convert_joint_angle(self._left_arm.joint_angles())
+        self._joint_velocities = self._convert_joint_angle(self._left_arm.joint_velocities())
+        #joint state
+        self._joint_state = np.hstack((self._joint_angles, self._joint_velocities))        
+
     def _step(self, action):
         """
         The action will be a [Nx1] velocity input for the arm, where N is the number of active joints
@@ -189,19 +196,20 @@ class BaxterEnv(gym.Env):
         self._left_arm.set_joint_velocities(cmd)
         #hopefully this will be enough to get one cycle
         self._time_rate.sleep()
-        #the state will be the current join angles
-        self._joint_angles = self._convert_joint_angle(self._left_arm.joint_angles())
+
+        #get the new states
+        self._observe_robot_state()
+
         image = self._last_image
         reward = self._calculate_reward(image,self._joint_angles)
         #pause the simulation
         rospy.wait_for_service('/gazebo/pause_physics')
         self._pause_gazebo()
 
-
         if(self._joint_only):
-            curr_state = self._joint_angles
+            curr_state = self._joint_state
         else:
-            curr_state = (self._joint_angles, image)
+            curr_state = (self._joint_state, image)
 
 
         #return the current state, reward and bool and something
@@ -289,10 +297,13 @@ class BaxterEnv(gym.Env):
         #step counter
         self._episode_steps = 0;
 
+        joint_velocities = np.zeros(joint_positions.shape)
+        joint_state = np.hstack((joint_positions, joint_velocities))
+
         if(self._joint_only):
-            curr_state = joint_positions
+            curr_state = joint_state
         else:
-            curr_state = (joint_positions, self._last_image)
+            curr_state = (joint_state, self._last_image)
 
         #return the newest image as state
         return curr_state

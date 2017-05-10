@@ -39,9 +39,12 @@ class DDPGAgent(object):
       self._gamma = gamma
       self._batch_size = batch_size
 
+
+      diff_multiplier = 2
+
       self._eval_times = 10 #how many episodes we run to evaluate the network
       self._eval_freq = 2000 #how many steps before we do evaluation 
-      self._checkin_freq = 10000
+      self._checkin_freq = int(10000 * diff_multiplier)
       self._update_tau = 0.001 
       
       #we make a copy of the preprocessor just for evaluation
@@ -248,7 +251,8 @@ class DDPGAgent(object):
 
         #Initialize values
         start_fitting_time = time.time()
-        total_step_num = 0;
+        total_step_num = 0
+        last_eval_step = 0
         
         #number of iterations
         for num_i in range(0, num_iterations):
@@ -275,14 +279,15 @@ class DDPGAgent(object):
 
             #use the actor network select an action
             curr_action = self.select_action(processed_curr_state)
+
             #add noise to the action
             curr_action = self.noise_update(curr_action,total_step_num)
             #apply the action and save the reward
 
             #clip the action
-            curr_action_clipped = np.clip(curr_action,env.action_space.low,env.action_space.high)
+            clipped_curr_action = np.clip(curr_action,env.action_space.low,env.action_space.high)
 
-            next_state, reward, is_terminal, debug_info = env.step(curr_action_clipped)
+            next_state, reward, is_terminal, debug_info = env.step(clipped_curr_action)
             #env.render()
             #get the current reward
             curr_reward = self._preprocessors.process_reward(reward)
@@ -298,14 +303,6 @@ class DDPGAgent(object):
               training_loss = self.update_step(total_step_num)
               cumulative_loss += training_loss
 
-            #check if we should run an evaluation step and save the rewards
-            if(total_step_num != 0 and total_step_num % self._eval_freq == 0):
-              print("\nstart performance evaluation for step:{:09d}".format(total_step_num))
-              #evaluate
-              avg_reward, avg_length, min_reward, max_reward = self.evaluate(env, self._eval_times, verbose=True, render=False)
-              #save the performance
-              self._performance_recorder.append((total_step_num, avg_reward, avg_length, min_reward, max_reward))            
-
             #check if we should to a checkpoint save
             if(total_step_num != 0 and (total_step_num%self._checkin_freq == 0)): # or (time.time() - start_fitting_time) > self._total_duration)):
               #do checkin
@@ -314,10 +311,22 @@ class DDPGAgent(object):
             ##update progress values
             step_num += 1
             total_step_num += 1
+            last_eval_step += 1
             cumulative_reward += curr_reward
             #update both rewards and state
             processed_curr_state = processed_next_state
             processed_curr_state_mem = processed_next_state_mem
+
+          #check if we should run an evaluation step and save the rewards
+          #This is moved out out of the step loop because it will accidentally restart the environment
+          if(last_eval_step > self._eval_freq):
+            last_eval_step = 0
+            print("\nstart performance evaluation for step:{:09d}".format(total_step_num))
+            #evaluate
+            avg_reward, avg_length, min_reward, max_reward = self.evaluate(env, self._eval_times, verbose=True, render=False)
+            #save the performance
+            self._performance_recorder.append((total_step_num, avg_reward, avg_length, min_reward, max_reward))   
+
 
           #for tracking purposes
           sys.stdout.write("\r{:09d} ep:{:04d}, len:{:04d}, reward:{:.4f}, loss:{:.5f}, time_per_step:{:.5f}".format(total_step_num, num_i, step_num, cumulative_reward, cumulative_loss/step_num, (time.time() - start_time)/step_num))
@@ -377,13 +386,14 @@ class DDPGAgent(object):
             curr_action = self.select_action(processed_curr_state)
             #clip the action
             curr_action = np.clip(curr_action,env.action_space.low,env.action_space.high)
-            #print(curr_action)
+
             #curr_action = np.array([0])
             if(render):
               env.render()
             curr_episode_step += 1
             #progress and step through for a fix number of steps according the skip frame number
             next_state, reward, is_terminal, info = env.step(curr_action)
+
             if(is_terminal):
               break
             curr_state = next_state

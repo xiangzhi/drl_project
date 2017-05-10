@@ -50,6 +50,7 @@ def create_critic_model(hist_window,state_size,action_dim,model_name):
 
     #merge in the action input after the first hidden layer
     action_input = Input(shape=(action_dim,),name='action_input')
+    action_layer = action_input
     merged_layer = keras.layers.concatenate([merged_layer, action_layer])
     merged_layer = Dense(32, activation='relu')(merged_layer)
     merged_layer = Dense(32, activation='relu')(merged_layer)
