@@ -45,17 +45,14 @@ def create_actor_model(hist_window,img_input_shape,number_joint,action_dim,model
     #merge both layers
     merged_layer = keras.layers.concatenate([joint_layer, img_out_layer])
     merged_layer = Dense(128,activation='relu')(merged_layer)
-    merged_layer = Dense(64,activation='relu')(merged_layer)
-    merged_layer = Dense(64,activation='relu')(merged_layer)
-    merged_layer = Dense(64,activation='relu')(merged_layer)
-    merged_layer = Dense(64,activation='relu')(merged_layer)
-
+    merged_layer = Dense(128,activation='relu')(merged_layer)
+    merged_layer = Dense(128,activation='relu')(merged_layer)
+    merged_layer = Dense(128,activation='relu')(merged_layer)
     #output layer
-    uniform_initializer = RandomUniform(minval=-3e-4, maxval=3e-4)
-    output_layer = Dense(action_dim, activation='tanh', kernel_initializer=uniform_initializer)(merged_layer)
+    output_layer = Dense(action_dim, activation='tanh')(merged_layer)
 
     #QUICK hack to deal with the problem of velocity kept getting clipped
-    scaled_out_put_layer = Lambda(lambda x:x*0.3)(output_layer)
+    scaled_out_put_layer = Lambda(lambda x:x*0.5)(output_layer)
     model = Model(inputs=[main_input,joint_input], outputs=scaled_out_put_layer, name=model_name)
 
     return model
@@ -76,7 +73,7 @@ def create_critic_model(hist_window,img_input_shape,number_joint,action_dim,mode
 
     #merge and add first hidden layer
     merged_layer = keras.layers.concatenate([joint_layer, img_out_layer])
-    merged_layer = Dense(128,activation='relu')(merged_layer)
+    merged_layer = Dense(256,activation='relu')(merged_layer)
 
     #the actual output inputs
     action_input = Input(shape=(action_dim,),name='action_input')
@@ -84,14 +81,11 @@ def create_critic_model(hist_window,img_input_shape,number_joint,action_dim,mode
 
     #merge all three layers
     merged_layer = keras.layers.concatenate([merged_layer, action_input])
-    merged_layer = Dense(128,activation='relu')(merged_layer)
-    merged_layer = Dense(128,activation='relu')(merged_layer)
-    merged_layer = Dense(128,activation='relu')(merged_layer)
-    merged_layer = Dense(128,activation='relu')(merged_layer)
-    merged_layer = Dense(128,activation='relu')(merged_layer)
+    merged_layer = Dense(256,activation='relu')(merged_layer)
+    merged_layer = Dense(256,activation='relu')(merged_layer)
+    merged_layer = Dense(256,activation='relu')(merged_layer)
     #output layer
-    uniform_initializer = RandomUniform(minval=-3e-4, maxval=3e-4)
-    output_layer = Dense(action_dim, activation='linear', kernel_initializer=uniform_initializer)(merged_layer)
+    output_layer = Dense(action_dim, activation='linear')(merged_layer)
 
     model = Model(inputs=[main_input,joint_input,action_input], outputs=output_layer, name=model_name)
 
@@ -115,9 +109,10 @@ def main():
     input_shape = (80,80,3)
     batch_size = 32
     action_dim = env.action_space.shape[0]
-    number_joint = 7
-    memory_size = 100000
+    joint_state_num = env.observation_space.shape[0]
+    memory_size = 1000000
     memory_burn_in_num = int(memory_size*0.05)# 5% of the whole memory
+    #memory_burn_in_num = 100# 5% of the whole memory
     history_size = 4
     
     actor_learning_rate = 0.01
@@ -129,8 +124,8 @@ def main():
     keras_prep = KerasPreprocessor(["joint_input","image_input"])
     preprocessors = PreprocessorSequence([baxter_prep, history_prep,numpy_prep,keras_prep]) #from left to right
 
-    actor_model = create_actor_model(history_size,input_shape,number_joint, action_dim,'actor_model_{}'.format(run_name,))
-    critic_model = create_critic_model(history_size,input_shape,number_joint=number_joint,
+    actor_model = create_actor_model(history_size,input_shape,joint_state_num, action_dim,'actor_model_{}'.format(run_name,))
+    critic_model = create_critic_model(history_size,input_shape,number_joint=joint_state_num,
         action_dim=action_dim,
         model_name='critic_model_{}'.format(run_name,))
 
@@ -138,7 +133,7 @@ def main():
     optimizer = Adam(lr=critic_learning_rate, beta_1=0.9, beta_2=0.999, epsilon=1e-08, decay=0.0)
     loss_func = huber_loss
 
-    noise_generator = OU_Generator(np.zeros(action_dim))
+    noise_generator = OU_Generator(np.zeros(action_dim),theta=0.1, sigma=0.1)
 
     #memory = ActionReplayMemory(1000000,4)
     memory = ActionReplayMemory(memory_size,4)

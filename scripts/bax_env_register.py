@@ -9,7 +9,7 @@ register(
         'start_joint_list': np.array([-0.7,-0.75,0,2, 0,-1.35, 0]),
         #'active_joint_list':[False,False,False,True,True,True,False]
         'active_joint_list':np.array([False,False,False,True,True,True,False]),
-        'random_start':True,
+        'random_start':False,
         'neg_reward':-0.1
     }
 )

@@ -36,7 +36,7 @@ def create_actor_model(hist_window,state_size,action_dim,model_name):
     merged_layer = Dense(16, activation='relu')(merged_layer)
     merged_layer = Dense(16, activation='relu')(merged_layer)
     output_layer = Dense(action_dim, activation='tanh')(merged_layer)
-    scaled_output_layer = Lambda(lambda x:x*1)(output_layer)
+    scaled_output_layer = Lambda(lambda x:x*2)(output_layer)
 
     return Model(inputs=pendulum_input, outputs=scaled_output_layer, name=model_name)
 

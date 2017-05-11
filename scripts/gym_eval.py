@@ -20,6 +20,50 @@ import matplotlib.pyplot as plt
 import tensorflow as tf
 from keras import backend as K
 
+def random_eval(env, num_episodes, render=False, verbose=False, max_episode_length= None):
+    reward_arr = np.zeros((num_episodes))
+    length_arr = np.zeros((num_episodes))
+    frame_num = 0
+
+
+    #number of episodes
+    for episode_num in range(0, num_episodes):
+
+      curr_episode_reward = 0
+      curr_episode_step = 0
+      #get the initial state
+      curr_state = env.reset()
+      if(render):
+        env.render()
+
+      frame_num = 0
+      curr_reward = 0
+      curr_action = 0
+      is_terminal = False
+
+      while(max_episode_length == None or curr_episode_step <= max_episode_length):
+       
+        if(render):
+          env.render()
+        curr_episode_step += 1
+        #progress and step through for a fix number of steps according the skip frame number
+        next_state, reward, is_terminal, info = env.step(env.action_space.sample())
+
+        if(is_terminal):
+          break
+        curr_state = next_state
+        curr_episode_reward += reward
+
+
+      #print("Episode {} ended with length:{} and reward:{}".format(episode_num, curr_episode_step, curr_episode_reward))
+      reward_arr[episode_num] = curr_episode_reward
+      length_arr[episode_num] = curr_episode_step
+
+      if(verbose):
+        sys.stdout.write("\revaluating game: {}/{} length:{} and reward:{}".format(episode_num+1, num_episodes, curr_episode_step, curr_episode_reward))
+        sys.stdout.flush()
+    return reward_arr, length_arr
+
 def main():
 
     #make sure it's the right format
@@ -73,6 +117,7 @@ def main():
 
     agent = DDPGAgent(sess,actor_model, critic_model, preprocessors, None, None, None,"eval_run")
     reward_arr, length_arr = agent.evaluate_detailed(env,eval_size,render=render_flag, verbose=True)
+    #reward_arr, length_arr = random_eval(env,eval_size,render=render_flag, verbose=True)
     print("\nRan {} Episodes, reward:M={}, SD={} length:M={}, SD={}".format(eval_size, np.mean(reward_arr),np.std(reward_arr),np.mean(length_arr), np.std(reward_arr)))
     print("max:{} min:{}".format(np.max(reward_arr), np.min(reward_arr)))
 
