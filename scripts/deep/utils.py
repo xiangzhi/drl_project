@@ -138,3 +138,47 @@ def rgb2gray(rgb):
     gray = 0.2989 * r + 0.5870 * g + 0.1140 * b
 
     return gray
+
+def random_eval(env, num_episodes, render=False, verbose=False, max_episode_length= None):
+    reward_arr = np.zeros((num_episodes))
+    length_arr = np.zeros((num_episodes))
+    frame_num = 0
+
+
+    #number of episodes
+    for episode_num in range(0, num_episodes):
+
+      curr_episode_reward = 0
+      curr_episode_step = 0
+      #get the initial state
+      curr_state = env.reset()
+      if(render):
+        env.render()
+
+      frame_num = 0
+      curr_reward = 0
+      curr_action = 0
+      is_terminal = False
+
+      while(max_episode_length == None or curr_episode_step <= max_episode_length):
+       
+        if(render):
+          env.render()
+        curr_episode_step += 1
+        #progress and step through for a fix number of steps according the skip frame number
+        next_state, reward, is_terminal, info = env.step(env.action_space.sample())
+
+        if(is_terminal):
+          break
+        curr_state = next_state
+        curr_episode_reward += reward
+
+
+      #print("Episode {} ended with length:{} and reward:{}".format(episode_num, curr_episode_step, curr_episode_reward))
+      reward_arr[episode_num] = curr_episode_reward
+      length_arr[episode_num] = curr_episode_step
+
+      if(verbose):
+        sys.stdout.write("\revaluating game: {}/{} length:{} and reward:{}".format(episode_num+1, num_episodes, curr_episode_step, curr_episode_reward))
+        sys.stdout.flush()
+    return reward_arr, length_arr

@@ -40,14 +40,14 @@ def create_actor_model(hist_window,img_input_shape,number_joint,action_dim,model
 
     #action inputs
     joint_input = Input(shape=(number_joint,hist_window),name='joint_input')
-    joint_layer = Dense(64,activation='relu')(joint_input)
+    joint_layer = Dense(32,activation='relu')(joint_input)
     joint_layer = Flatten()(joint_layer)
     #merge both layers
     merged_layer = keras.layers.concatenate([joint_layer, img_out_layer])
-    merged_layer = Dense(128,activation='relu')(merged_layer)
-    merged_layer = Dense(128,activation='relu')(merged_layer)
-    merged_layer = Dense(128,activation='relu')(merged_layer)
-    merged_layer = Dense(128,activation='relu')(merged_layer)
+    merged_layer = Dense(64,activation='relu')(merged_layer)
+    merged_layer = Dense(64,activation='relu')(merged_layer)
+    merged_layer = Dense(64,activation='relu')(merged_layer)
+    merged_layer = Dense(64,activation='relu')(merged_layer)
     #output layer
     output_layer = Dense(action_dim, activation='tanh')(merged_layer)
 
@@ -68,12 +68,12 @@ def create_critic_model(hist_window,img_input_shape,number_joint,action_dim,mode
 
     #action inputs
     joint_input = Input(shape=(number_joint, hist_window),name='joint_input')
-    joint_layer = Dense(64,activation='relu')(joint_input)
+    joint_layer = Dense(32,activation='relu')(joint_input)
     joint_layer = Flatten()(joint_layer)
 
     #merge and add first hidden layer
     merged_layer = keras.layers.concatenate([joint_layer, img_out_layer])
-    merged_layer = Dense(256,activation='relu')(merged_layer)
+    merged_layer = Dense(128,activation='relu')(merged_layer)
 
     #the actual output inputs
     action_input = Input(shape=(action_dim,),name='action_input')
@@ -81,9 +81,9 @@ def create_critic_model(hist_window,img_input_shape,number_joint,action_dim,mode
 
     #merge all three layers
     merged_layer = keras.layers.concatenate([merged_layer, action_input])
-    merged_layer = Dense(256,activation='relu')(merged_layer)
-    merged_layer = Dense(256,activation='relu')(merged_layer)
-    merged_layer = Dense(256,activation='relu')(merged_layer)
+    merged_layer = Dense(128,activation='relu')(merged_layer)
+    merged_layer = Dense(128,activation='relu')(merged_layer)
+    merged_layer = Dense(128,activation='relu')(merged_layer)
     #output layer
     output_layer = Dense(action_dim, activation='linear')(merged_layer)
 

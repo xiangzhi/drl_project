@@ -11,6 +11,7 @@ from keras.engine.topology import Layer as BLayer
 
 from deep.preprocessors import PreprocessorSequence, HistoryPreprocessor, PendulumPreprocessor, KerasPreprocessor, BaxterPreprocessor, NumpyPreprocessor
 from deep.ddpg import DDPGAgent
+from deep.utils import random_eval
 
 
 import sys
@@ -27,8 +28,8 @@ import bax_env_register
 def main():
 
     #make sure it's the right format
-    if(len(sys.argv) != 4):
-        print("usage:{} <environment> <run_name> <weight_num>".format(sys.argv[0]))
+    if(len(sys.argv) != 5):
+        print("usage:{} <environment> <run_name> <weight_num> <render>".format(sys.argv[0]))
         return sys.exit()
 
     env_name = sys.argv[1]
@@ -47,6 +48,7 @@ def main():
     init = tf.global_variables_initializer()
     sess.run(init)
 
+    render_flag = True if sys.argv[4] == 't' else False
 
     #Load the model and weights
     with open(actor_model_name) as json_file:
@@ -76,7 +78,8 @@ def main():
         preprocessors = PreprocessorSequence([history_prep,pendulum_prep,keras_prep]) #from left to right
 
     agent = DDPGAgent(sess,actor_model, critic_model, preprocessors, None, None, None,"eval_run")
-    reward_arr, length_arr = agent.evaluate_detailed(env,eval_size,render=True, verbose=True)
+    #reward_arr, length_arr = agent.evaluate_detailed(env,eval_size,render=render_flag, verbose=True)
+    reward_arr, length_arr = random_eval(env,eval_size,render=render_flag, verbose=True)
     print("\nRan {} Episodes, reward:M={}, SD={} length:M={}, SD={}".format(eval_size, np.mean(reward_arr),np.std(reward_arr),np.mean(length_arr), np.std(reward_arr)))
     print("max:{} min:{}".format(np.max(reward_arr), np.min(reward_arr)))
 
